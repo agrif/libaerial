@@ -29,8 +29,12 @@ public class Client : GLib.Object
 	private const int TIMESYNC_INTERVAL = 1000;
 	private const int TIME_PER_PACKET = (FRAMES_PER_PACKET * 1000 / TIMESTAMPS_PER_SECOND) - 1;
 	private const int PACKET_BACKLOG = 1000;
+	private const int BUFFER_SECONDS = 2;
+	private const int MAX_DELTA = 10 * FRAMES_PER_PACKET;
 	
 	private const int64 NTP_EPOCH = 0x83aa7e80;
+	
+	private const int BUFFER_SIZE = 2 * SHORTS_PER_PACKET * 50;
 	
 	private const uint16 DEFAULT_PORT = 5000;
 	private const string PROTOCOL = "RTSP/1.0";
@@ -62,6 +66,8 @@ public class Client : GLib.Object
 	private string rsa_aes_key;
 	// reference time for when the channels opened
 	private int64 timing_ref_time;
+	// number of frames written since last sync
+	private uint32 frames_since_sync;
 	// when the last sync packet was emitted
 	private int64 last_sync_time;
 	// what timestamp the last sync packet had
@@ -70,6 +76,8 @@ public class Client : GLib.Object
 	private int32 timestamp_delta;
 	// previously-sent audio packets
 	private AudioPacket[] audio_packets;
+	
+	private RingBuffer audio_buffer;
 	
 	private GLib.SocketClient connector;
 	private GLib.SocketConnection socket;
@@ -98,6 +106,8 @@ public class Client : GLib.Object
 		audio_packets.resize(PACKET_BACKLOG);
 		for (var i = 0; i < audio_packets.length; i++)
 			audio_packets[i] = AudioPacket();
+		
+		audio_buffer = new RingBuffer(BUFFER_SIZE);
 		
 		connector = new GLib.SocketClient();
 	}
@@ -360,9 +370,16 @@ public class Client : GLib.Object
 	private void send_audio_packet(bool is_first)
 	{
 		// if we're ahead by 10+ packets, ignore this
-		if (!is_first && (int)timestamp_delta > (int)(10 * FRAMES_PER_PACKET))
+		if (!is_first && (int)timestamp_delta > MAX_DELTA)
 		{
 			timestamp_delta -= FRAMES_PER_PACKET;
+			return;
+		}
+		
+		// if we don't have data, also ignore this
+		if (audio_buffer.get_read_space() < 2 * SHORTS_PER_PACKET)
+		{
+			stdout.printf("buffer underrun\n");
 			return;
 		}
 		
@@ -401,19 +418,15 @@ public class Client : GLib.Object
 		// write the data!
 		for (var i = 0; i < data_size; i += 4)
 		{
-			// 1 Hz - full cycle in TIMESTAMPS_PER_SECOND
-			// 2 Hz - full cycle in TIMESTAMPS_PER_SECOND / 2
-			// full cycle in x - sin(2pi / x * t)
-			// so: sin(2pi * t / (TIMESTAMPS_PER_SECOND / f))
-			var freq = 440;
-			double sample = Math.sin((2.0 * Math.PI * timestamp * freq) / TIMESTAMPS_PER_SECOND) * ((1 << 15) - 1);
-			uint16 samplebin = (uint16)((int16)sample);
+			uint8 frame[4];
+			var framelen = audio_buffer.read(frame);
 			
-			bw.write((samplebin >> 8) & 0xff, 8);
-			bw.write(samplebin & 0xff, 8);
-			bw.write((samplebin >> 8) & 0xff, 8);
-			bw.write(samplebin & 0xff, 8);
+			bw.write(frame[0], 8);
+			bw.write(frame[1], 8);
+			bw.write(frame[2], 8);
+			bw.write(frame[3], 8);
 			timestamp++;
+			frames_since_sync++;
 		}
 		
 		uint8[] payload = bw.finalize();
@@ -472,7 +485,7 @@ public class Client : GLib.Object
 				marker = true,
 				payload_type = 84,
 				sequence = 7, // yes, on purpose. ewwwwww
-				timestamp = projected_timestamp - 2 * TIMESTAMPS_PER_SECOND,
+				timestamp = projected_timestamp - BUFFER_SECONDS * TIMESTAMPS_PER_SECOND,
 				source_id = null
 			};
 			
@@ -487,9 +500,11 @@ public class Client : GLib.Object
 			// or you'll get skipping!
 			
 			debug("sync current: %u projected: %u delta: %i", timestamp, projected_timestamp, timestamp_delta);
+			stdout.printf("sync current: %u projected: %u delta: %i\n", timestamp, projected_timestamp, timestamp_delta);
 			control_channel.send(outp, payload);
 			last_sync_time = now;
 			last_sync_timestamp = projected_timestamp;
+			frames_since_sync = 0;
 		} catch (Error e) {
 			// TODO error
 			stderr.printf(e.message);
@@ -529,15 +544,18 @@ public class Client : GLib.Object
 		{
 			var first_seq = dat.read_uint16();
 			var count = dat.read_uint16();
+			print("!!!!! error count %u\n", count);
 			for (var s = first_seq; s < first_seq + count; s++)
 			{
 				var i = s % audio_packets.length;
 				if (audio_packets[i].in_use && audio_packets[i].sequence == s)
 				{
 					debug("resending packet %u", s);
+					stdout.printf("resending packet %u\n", s);
 					c.send(outp, audio_packets[i].data);
 				} else {
 					debug("packet %u requested but not found", s);
+					stdout.printf("packet %u requested but not found\n", s);
 				}
 			}
 		} catch (Error e) {
@@ -584,7 +602,17 @@ public class Client : GLib.Object
 		} catch (Error e) {
 			// TODO error handling!
 			stderr.printf(e.message);
-		}
+		}		
+	}
+	
+	public size_t write_raw(uint8[] data)
+	{
+		return audio_buffer.write(data);
+	}
+	
+	public uint get_queued_samples()
+	{
+		return (uint)audio_buffer.get_read_space() / 4;
 	}
 }
 

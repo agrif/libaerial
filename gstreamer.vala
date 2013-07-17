@@ -1,9 +1,65 @@
-private class AirtunesSink : Gst.Audio.Sink
+extern void ugly_set_metadata(GLib.ObjectClass klass, string a, string b, string c, string d);
+extern void ugly_add_pad_template(GLib.ObjectClass klass, Gst.PadTemplate templ);
+
+public class AirtunesSink : Gst.Audio.Sink
 {
+	static construct
+	{
+		set_metadata("Airtunes Sink", "FIXME:General", "an audio sink for airtunes devices", "Aaron Griffith <aargri@gmail.com>");
+		
+		var caps = new Gst.Caps.empty_simple("audio/x-raw");
+		caps.set_value("rate", 44100);
+		caps.set_value("layout", "interleaved");
+		caps.set_value("channels", 2);
+		caps.set_value("format", "S16BE");
+		
+		var sink = new Gst.PadTemplate("sink", Gst.PadDirection.SINK, Gst.PadPresence.ALWAYS, caps);
+		add_pad_template(sink);
+	}
+	
+	private Airtunes.Client? client = null;
+	
 	public override bool open()
 	{
-		debug("open");
+		client = new Airtunes.Client();
+		try
+		{
+			client.connect_to_host("apple-tv");
+			return true;
+		} catch (Error e) {
+			return false;
+		}
+	}
+	
+	public override bool prepare(Gst.Audio.RingBufferSpec spec)
+	{
 		return true;
+	}
+	
+	public override bool unprepare()
+	{
+		return true;
+	}
+	
+	public override bool close()
+	{
+		client = null;
+		return true;
+	}
+	
+	public override int write(uint8[] data)
+	{
+		return (int)client.write_raw(data);
+	}
+	
+	public override uint delay()
+	{
+		return client.get_queued_samples();
+	}
+	
+	public override void reset()
+	{
+		//
 	}
 }
 
