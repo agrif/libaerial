@@ -1,12 +1,12 @@
 SOURCES=main.vala keys.vala client.vala rtp.vala crypto.vala bitwriter.vala ring-buffer.vala
 TARGET=test
-LDFLAGS=`pkg-config --libs gio-2.0 nettle`
+LDFLAGS=`pkg-config --libs gio-2.0 nettle` -L./alac/ -lalac
 
 GSTSOURCES=gstreamer.vala
 GSTTARGET=airtunes.so
 GSTLDFLAGS=`pkg-config --libs gstreamer-1.0 gstreamer-audio-1.0`
 
-CFLAGS=-w -fPIC `pkg-config --cflags gio-2.0 nettle gstreamer-1.0`
+CFLAGS=-w -fPIC -O3 `pkg-config --cflags gio-2.0 nettle gstreamer-1.0`
 VALAC_FLAGS=--vapidir=. --pkg gio-2.0 --pkg nettle --pkg posix --pkg gstreamer-1.0 --pkg gstreamer-audio-1.0 --disable-warnings
 
 VALAC=valac
@@ -60,7 +60,7 @@ alac/libalac.a :
 	$(call quiet,CXX) -c ${CFLAGS} $< -o $@
 
 ${TARGET} : alac/libalac.a alac-shim.o ${SOURCES:.vala=.o}
-	$(call quiet,LD) ${LDFLAGS} $^ -o $@
+	$(call quiet,LD) $^ -o $@ ${LDFLAGS}
 
-${GSTTARGET} :alac/libalac.a alac-shim.o ${SOURCES:.vala=.o} ${GSTSOURCES:.vala=.o} gst-shim.o
-	$(call quiet,LD) -rdynamic -shared ${LDFLAGS} ${GSTLDFLAGS} $^ -o $@
+${GSTTARGET} : alac/libalac.a alac-shim.o ${SOURCES:.vala=.o} ${GSTSOURCES:.vala=.o} gst-shim.o
+	$(call quiet,LD) -rdynamic -shared $^ -o $@ ${LDFLAGS} ${GSTLDFLAGS}

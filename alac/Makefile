@@ -15,8 +15,7 @@ endif
 
 AR=ar
 
-CFLAGS = -g -O3 -c
-LFLAGS = -Wall
+CFLAGS = -O3 -c -fPIC -Wno-multichar
 
 SRCDIR=.
 
