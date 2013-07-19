@@ -10,9 +10,11 @@ CFLAGS=-w -fPIC `pkg-config --cflags gio-2.0 nettle gstreamer-1.0`
 VALAC_FLAGS=--vapidir=. --pkg gio-2.0 --pkg nettle --pkg posix --pkg gstreamer-1.0 --pkg gstreamer-audio-1.0 --disable-warnings
 
 VALAC=valac
-LD=${CC}
+# we need to use c++ to link!
+LD=${CXX}
 
 .PHONY : all clean
+.PRECIOUS : ${SOURCES:.vala=.c} ${GSTSOURCES:.vala=.c}
 
 all : ${TARGET} ${GSTTARGET}
 
@@ -23,6 +25,9 @@ endif
 ifeq ($(V),0)
 quiet = @echo "  $1	$@"; $($1)
 endif
+ifeq ($(V),1)
+quiet = $($1)
+endif
 
 clean :
 	rm -f ${TARGET} ${GSTTARGET}
@@ -32,10 +37,15 @@ clean :
 	rm -f ${SOURCES:.vala=.c}
 	rm -f ${GSTSOURCES:.vala=.c}
 	rm -f gst-shim.o
+	rm -f alac-shim.o
+	make -C alac clean
 
 valac.stamp : ${SOURCES} ${GSTSOURCES} nettle.vapi
 	$(call quiet,VALAC) -C ${VALAC_FLAGS} ${SOURCES} ${GSTSOURCES}
 	@touch $@
+
+alac/libalac.a :
+	make -C alac
 
 % : %.o
 % : %.c
@@ -46,8 +56,11 @@ valac.stamp : ${SOURCES} ${GSTSOURCES} nettle.vapi
 %.o : %.c
 	$(call quiet,CC) -c ${CFLAGS} $< -o $@
 
-${TARGET} : ${SOURCES:.vala=.o}
+%.o : %.cpp
+	$(call quiet,CXX) -c ${CFLAGS} $< -o $@
+
+${TARGET} : alac/libalac.a alac-shim.o ${SOURCES:.vala=.o}
 	$(call quiet,LD) ${LDFLAGS} $^ -o $@
 
-${GSTTARGET} :${SOURCES:.vala=.o} ${GSTSOURCES:.vala=.o} gst-shim.o
+${GSTTARGET} :alac/libalac.a alac-shim.o ${SOURCES:.vala=.o} ${GSTSOURCES:.vala=.o} gst-shim.o
 	$(call quiet,LD) -rdynamic -shared ${LDFLAGS} ${GSTLDFLAGS} $^ -o $@

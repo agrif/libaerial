@@ -11,7 +11,8 @@ public class AirtunesSink : Gst.Audio.Sink
 		caps.set_value("rate", 44100);
 		caps.set_value("layout", "interleaved");
 		caps.set_value("channels", 2);
-		caps.set_value("format", "S16BE");
+		// TODO use native endianness (this breaks BE systems)
+		caps.set_value("format", "S16LE");
 		
 		var sink = new Gst.PadTemplate("sink", Gst.PadDirection.SINK, Gst.PadPresence.ALWAYS, caps);
 		add_pad_template(sink);

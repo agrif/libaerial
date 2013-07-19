@@ -1,6 +1,8 @@
 namespace Airtunes
 {
 
+private extern bool alac_encode(uint8[] input, out uint8[] output);
+
 private struct RTSPResponse
 {
 	public int code;
@@ -397,7 +399,20 @@ public class Client : GLib.Object
 		
 		// +16 for the ALAC header
 		var data_size = 2 * SHORTS_PER_PACKET;
-		var num_frames = FRAMES_PER_PACKET;
+		uint8[] frames = {};
+		frames.resize(data_size);
+		uint8[] payload;
+		audio_buffer.read(frames);
+		if (!alac_encode(frames, out payload))
+		{
+			// TODO error
+			stderr.printf("encode fail\n");
+			return;
+		}
+		timestamp += FRAMES_PER_PACKET;
+		frames_since_sync += FRAMES_PER_PACKET;
+		
+		/*var num_frames = FRAMES_PER_PACKET;
 		var bw = new BitWriter(data_size + 16);
 		
 		// ALAC header
@@ -427,9 +442,9 @@ public class Client : GLib.Object
 			bw.write(frame[3], 8);
 			timestamp++;
 			frames_since_sync++;
-		}
+			}*/
 		
-		uint8[] payload = bw.finalize();
+		//uint8[] payload = bw.finalize();
 		if (require_encryption)
 			payload = aes_encrypt(aes_key, aes_iv, payload);
 		
@@ -605,6 +620,7 @@ public class Client : GLib.Object
 		}		
 	}
 	
+	// native endian!!
 	public size_t write_raw(uint8[] data)
 	{
 		return audio_buffer.write(data);
