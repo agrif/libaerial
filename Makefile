@@ -6,7 +6,7 @@ GSTSOURCES=gstreamer.vala
 GSTTARGET=airtunes.so
 GSTLDFLAGS=`pkg-config --libs gstreamer-1.0 gstreamer-audio-1.0`
 
-CFLAGS=-w -fPIC `pkg-config --cflags gio-2.0 nettle gstreamer-1.0`
+CFLAGS=-w -fPIC -O3 `pkg-config --cflags gio-2.0 nettle gstreamer-1.0`
 VALAC_FLAGS=--vapidir=. --pkg gio-2.0 --pkg nettle --pkg posix --pkg gstreamer-1.0 --pkg gstreamer-audio-1.0 --disable-warnings
 
 VALAC=valac

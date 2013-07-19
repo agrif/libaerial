@@ -62,6 +62,7 @@ class RTPClient : Object
 						// TODO proper error reporting
 						stderr.printf(e.message);
 					}
+					return true;
 				});
 			source.attach(MainContext.default());
 		} catch (Error e) {
