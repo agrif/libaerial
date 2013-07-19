@@ -17,6 +17,7 @@ public class AirtunesSink : Gst.Audio.Sink
 		add_pad_template(sink);
 	}
 	
+	public string host { get; set; default = "localhost"; }
 	private Airtunes.Client? client = null;
 	
 	public override bool open()
@@ -24,7 +25,8 @@ public class AirtunesSink : Gst.Audio.Sink
 		client = new Airtunes.Client();
 		try
 		{
-			client.connect_to_host("apple-tv");
+			stdout.printf("connecting to %s\n", host);
+			client.connect_to_host(host);
 			return true;
 		} catch (Error e) {
 			return false;
