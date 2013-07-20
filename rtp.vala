@@ -14,7 +14,7 @@ struct RTPPacket
 	uint32? source_id;
 }
 
-class RTPClient : Object
+class RTP : Object
 {	
 	public string local_host { get; construct; }
 	public uint local_port { get; construct; }
@@ -70,7 +70,7 @@ class RTPClient : Object
 		}
 	}
 	
-	public RTPClient(string local_host, uint16 local_port) throws Error
+	public RTP(string local_host, uint16 local_port) throws Error
 	{
 		Object(local_host: local_host, local_port: local_port);
 		if (construct_error != null)
