@@ -6,14 +6,15 @@ namespace Airtunes
 	// reads/writes are atomic, which I'm told is a reasonable
 	// assumption on modern systems.
 	// http://jackit.sourceforge.net/cgi-bin/lxr/http/source/libjack/ringbuffer.c
-	class RingBuffer
+	
+	public struct RingBuffer
 	{
-		private uint8[] buf;
-		private size_t write_head;
-		private size_t read_head;
-		private size_t size_mask;
+		public uint8[] buf;
+		public size_t write_head;
+		public size_t read_head;
+		public size_t size_mask;
 		
-		public RingBuffer(size_t sz)
+		public void init(size_t sz)
 		{
 			uint power_of_two;
 			for (power_of_two = 1; 1 << power_of_two < sz; power_of_two++);

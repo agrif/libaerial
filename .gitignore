@@ -1,2 +1,16 @@
 *.o
-valac.stamp
+/valac.stamp
+/airtunes.so
+/alac/libalac.a
+/libairtunes.h
+/libairtunes.vapi
+/test
+
+/binary.c
+/client.c
+/crypto.c
+/gstreamer.c
+/main.c
+/ring-buffer.c
+/rtp.c
+/rtsp.c

@@ -1,4 +1,4 @@
-SOURCES=main.vala keys.vala client.vala rtp.vala crypto.vala bitwriter.vala ring-buffer.vala rtsp.vala
+SOURCES=main.vala binary.vala client.vala rtp.vala crypto.vala ring-buffer.vala rtsp.vala
 TARGET=test
 LDFLAGS=`pkg-config --libs gio-2.0 nettle` -L./alac/ -lalac
 
@@ -38,10 +38,11 @@ clean :
 	rm -f ${GSTSOURCES:.vala=.c}
 	rm -f gst-shim.o
 	rm -f alac-shim.o
+	rm -f libairtunes.h libairtunes.vapi
 	make -C alac clean
 
 valac.stamp : ${SOURCES} ${GSTSOURCES} nettle.vapi
-	$(call quiet,VALAC) -C ${VALAC_FLAGS} ${SOURCES} ${GSTSOURCES}
+	$(call quiet,VALAC) -C ${VALAC_FLAGS} ${SOURCES} ${GSTSOURCES} -H libairtunes.h --vapi=libairtunes.vapi
 	@touch $@
 
 alac/libalac.a :

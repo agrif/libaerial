@@ -1,7 +1,7 @@
 namespace Airtunes
 {
 
-struct RTPPacket
+public struct RTPPacket
 {
 	uint8 version; // 2 bits
 	bool padding;
@@ -14,7 +14,7 @@ struct RTPPacket
 	uint32? source_id;
 }
 
-class RTP : Object
+public class RTP : Object
 {	
 	public string local_host { get; construct; }
 	public uint local_port { get; construct; }

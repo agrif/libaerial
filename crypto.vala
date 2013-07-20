@@ -1,6 +1,6 @@
 namespace Airtunes
 {
-	uint8[] aes_encrypt(uint8[] key, uint8[] iv, uint8[] data)
+	public uint8[] aes_encrypt(uint8[] key, uint8[] iv, uint8[] data)
 	{
 		return_if_fail(iv.length == Nettle.AES_BLOCK_SIZE);
 		

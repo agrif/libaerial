@@ -1,6 +1,6 @@
 namespace Airtunes
 {
-	uint8[] random_bytes(size_t count)
+	public uint8[] random_bytes(size_t count)
 	{
 		uint8[] buffer = {};
 		buffer.resize((int)count);
@@ -9,7 +9,7 @@ namespace Airtunes
 		return buffer;
 	}
 	
-	string bytes_to_hex(uint8[] buffer)
+	public string bytes_to_hex(uint8[] buffer)
 	{
 		string ret = "";
 		for (var i = 0; i < buffer.length; i++)
@@ -19,7 +19,7 @@ namespace Airtunes
 		return ret;
 	}
 	
-	string bytes_to_base64(uint8[] buffer)
+	public string bytes_to_base64(uint8[] buffer)
 	{
 		// strange base64 used in airtunes, no padding!
 		return Base64.encode(buffer).replace("=", "");

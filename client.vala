@@ -1,9 +1,9 @@
 namespace Airtunes
 {
 
-private extern bool alac_encode(uint8[] input, out uint8[] output);
+public extern bool alac_encode(uint8[] input, out uint8[] output);
 
-errordomain ClientError
+public errordomain ClientError
 {
 	HANDSHAKE_FAILED,
 }
@@ -76,7 +76,8 @@ public class Client : GLib.Object
 		for (var i = 0; i < audio_packets.length; i++)
 			audio_packets[i] = AudioPacket();
 		
-		audio_buffer = new RingBuffer(BUFFER_SIZE);
+		audio_buffer = new RingBuffer();
+		audio_buffer.init(BUFFER_SIZE);
 		
 		rtsp_channel = new RTSP();
 	}
@@ -276,39 +277,6 @@ public class Client : GLib.Object
 		timestamp += FRAMES_PER_PACKET;
 		frames_since_sync += FRAMES_PER_PACKET;
 		
-		/*var num_frames = FRAMES_PER_PACKET;
-		var bw = new BitWriter(data_size + 16);
-		
-		// ALAC header
-		bw.write(1, 3); // channel=1, stereo
-		bw.write(0, 4); // unknown
-		bw.write(0, 8); // unknown
-		bw.write(0, 4); // unknown
-		bw.write(1, 1); // hassize
-		bw.write(0, 2); // unused
-		bw.write(1, 1); // is-not-compressed
-		
-		// size of data
-		bw.write((num_frames >> 24) & 0xff, 8);
-		bw.write((num_frames >> 16) & 0xff, 8);
-		bw.write((num_frames >> 8 ) & 0xff, 8);
-		bw.write((num_frames      ) & 0xff, 8);
-		
-		// write the data!
-		for (var i = 0; i < data_size; i += 4)
-		{
-			uint8 frame[4];
-			var framelen = audio_buffer.read(frame);
-			
-			bw.write(frame[0], 8);
-			bw.write(frame[1], 8);
-			bw.write(frame[2], 8);
-			bw.write(frame[3], 8);
-			timestamp++;
-			frames_since_sync++;
-			}*/
-		
-		//uint8[] payload = bw.finalize();
 		if (require_encryption)
 			payload = aes_encrypt(aes_key, aes_iv, payload);
 		
