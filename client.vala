@@ -8,6 +8,18 @@ public errordomain ClientError
 	HANDSHAKE_FAILED,
 }
 
+public delegate int64 ClockFunc();
+
+public enum ClientState
+{
+	// when first created, and after disconnection/error
+	DISCONNECTED,
+	// after connection is made, before it's ready to accept data
+	CONNECTED,
+	// connected and ready to accept data
+	READY,
+}
+
 private struct AudioPacket
 {
 	bool in_use;
@@ -30,16 +42,21 @@ public class Client : GLib.Object
 	
 	private const int BUFFER_SIZE = 2 * SHORTS_PER_PACKET * 50;
 	
-	// used to position audio packets in time
-	private uint32 timestamp;
-	// used to sequence audio packets
-	private uint16 sequence;
-	// whether the remote requires encryption
-	private bool require_encryption = false;
+	// used to get a monotonic time
+	// units are in microseconds! 1000000μs == 1s
+	// if not set, we use GLib.get_monotonic_time()
+	public ClockFunc clock_func { get; set; default = get_monotonic_time; }
+	// connection state
+	public ClientState state { get; private set; default = ClientState.DISCONNECTED; }
+	public signal void on_error(Error e);
+	
 	// AES key and IV
 	private uint8[] aes_key;
 	private uint8[] aes_iv;
 	private string rsa_aes_key;
+	// whether the remote requires encryption
+	private bool require_encryption = false;
+	
 	// reference time for when the channels opened
 	private int64 timing_ref_time;
 	// number of frames written since last sync
@@ -50,8 +67,13 @@ public class Client : GLib.Object
 	private uint32 last_sync_timestamp;
 	// how many timestamps ahead the audio packets are
 	private int32 timestamp_delta;
+	
 	// previously-sent audio packets
 	private AudioPacket[] audio_packets;
+	// used to position audio packets in time
+	private uint32 timestamp;
+	// used to sequence audio packets
+	private uint16 sequence;
 	
 	private RingBuffer audio_buffer;
 	
@@ -106,8 +128,19 @@ public class Client : GLib.Object
 	
 	public async bool connect_to_host_async(string host_and_port) throws Error
 	{
+		try
+		{
+			return yield connect_to_host_intern(host_and_port);
+		} catch (Error e) {
+			on_error(e);
+			throw e;
+		}
+	}
+	
+	private async bool connect_to_host_intern(string host_and_port) throws Error
+	{
 		yield rtsp_channel.connect_to_host_async(host_and_port);
-		stdout.printf("got connection %p\n", rtsp_channel);
+		state = ClientState.CONNECTED;
 
 		// generate 16 random bytes for apple-challenge
 		var apple_challenge = bytes_to_base64(random_bytes(16));
@@ -207,7 +240,7 @@ public class Client : GLib.Object
 		timing_channel.connect_to(rtsp_channel.remote_address, timing_port);
 		control_channel.connect_to(rtsp_channel.remote_address, control_port);
 			
-		timing_ref_time = get_monotonic_time();			
+		timing_ref_time = clock_func();			
 		timing_channel.on_packet.connect(on_timing_packet);
 		control_channel.on_packet.connect(on_resend_packet);
 						
@@ -236,6 +269,7 @@ public class Client : GLib.Object
 		audio_time.attach(MainContext.default());
 		sync_time.attach(MainContext.default());
 		
+		state = ClientState.READY;
 		return true;
 	}
 	
@@ -304,13 +338,13 @@ public class Client : GLib.Object
 	{
 		if (is_first)
 		{
-			last_sync_time = get_monotonic_time();
+			last_sync_time = clock_func();
 			last_sync_timestamp = timestamp;
 			timestamp_delta = 0;
 		}
 		
 		var projected_timestamp = last_sync_timestamp;
-		var now = get_monotonic_time();
+		var now = clock_func();
 		if (now > last_sync_time)
 		{
 			var delta = now - last_sync_time;
@@ -365,7 +399,7 @@ public class Client : GLib.Object
 	
 	private uint64 get_ntp_time()
 	{
-		var mono = (uint64)(get_monotonic_time() - timing_ref_time);
+		var mono = (uint64)(clock_func() - timing_ref_time);
 		
 		var seconds = (uint64)(mono / 1000000) + NTP_EPOCH;
 		var microsecs = (uint64)(mono % 1000000);

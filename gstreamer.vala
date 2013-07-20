@@ -1,6 +1,3 @@
-extern void ugly_set_metadata(GLib.ObjectClass klass, string a, string b, string c, string d);
-extern void ugly_add_pad_template(GLib.ObjectClass klass, Gst.PadTemplate templ);
-
 public class AirtunesSink : Gst.Audio.Sink
 {
 	static construct
@@ -24,6 +21,15 @@ public class AirtunesSink : Gst.Audio.Sink
 	public override bool open()
 	{
 		client = new Airtunes.Client();
+		client.on_error.connect((c, e) =>
+			{
+				stderr.printf("got error %s\n", e.message);
+			});
+		client.notify["state"].connect((c, prop) =>
+			{
+				stdout.printf("client changed to state %s\n", client.state.to_string());
+			});
+		
 		try
 		{
 			stdout.printf("connecting to %s\n", host);
