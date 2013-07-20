@@ -34,6 +34,7 @@ public class AirtunesSink : Gst.Audio.Sink
 		{
 			stdout.printf("connecting to %s\n", host);
 			client.connect_to_host(host);
+			client.play();
 			return true;
 		} catch (Error e) {
 			return false;

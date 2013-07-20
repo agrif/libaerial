@@ -18,6 +18,8 @@ public enum ClientState
 	CONNECTED,
 	// connected and ready to accept data
 	READY,
+	// connected, ready, and currently streaming data
+	PLAYING,
 }
 
 private struct AudioPacket
@@ -49,6 +51,9 @@ public class Client : GLib.Object
 	// connection state
 	public ClientState state { get; private set; default = ClientState.DISCONNECTED; }
 	public signal void on_error(Error e);
+	
+	// set by connect_to_host
+	private string? connect_host_and_port = null;
 	
 	// AES key and IV
 	private uint8[] aes_key;
@@ -104,16 +109,16 @@ public class Client : GLib.Object
 		rtsp_channel = new RTSP();
 	}
 	
-	public bool connect_to_host(string host_and_port) throws Error
+	private bool transition(ClientState target) throws Error
 	{
 		var loop = new MainLoop();
 		bool ret = false;
 		Error? err = null;
-		connect_to_host_async.begin(host_and_port, (obj, res) =>
+		transition_async.begin(target, (obj, res) =>
 			{
 				try
 				{
-					ret = connect_to_host_async.end(res);
+					ret = transition_async.end(res);
 				} catch (Error e) {
 					err = e;
 				}
@@ -126,151 +131,211 @@ public class Client : GLib.Object
 		return ret;
 	}
 	
-	public async bool connect_to_host_async(string host_and_port) throws Error
+	private async bool transition_async(ClientState target) throws Error
 	{
 		try
 		{
-			return yield connect_to_host_intern(host_and_port);
+			return yield transition_intern(target);
 		} catch (Error e) {
 			on_error(e);
 			throw e;
 		}
 	}
 	
-	private async bool connect_to_host_intern(string host_and_port) throws Error
+	private async bool transition_intern(ClientState target) throws Error
 	{
-		yield rtsp_channel.connect_to_host_async(host_and_port);
-		state = ClientState.CONNECTED;
-
-		// generate 16 random bytes for apple-challenge
-		var apple_challenge = bytes_to_base64(random_bytes(16));
-			
-		// send RTSP OPTIONS
-		rtsp_channel.request_full("OPTIONS", "*", null,
-								  Apple_Challenge: apple_challenge);
-			
-		var resp = yield rtsp_channel.recv_response();
-		if (resp.code != 200)
-			throw new ClientError.HANDSHAKE_FAILED(resp.message);
-		if ("Apple-Response" in resp.headers)
-			require_encryption = true;
-			
-		if (require_encryption)
-			debug("using encryption");
-		else
-			debug("not using encryption");
-			
-		// send RTSP ANNOUNCE
-		// TODO - use auth, if needed
-		rtsp_channel.request("ANNOUNCE");
-		rtsp_channel.header("Content-Type", "application/sdp");
-		rtsp_channel.finish(("v=0\r\n" +
-							 "o=iTunes %u O IN IP4 %s\r\n" +
-							 "s=iTunes\r\n" +
-							 "c=IN IP4 %s\r\n" +
-							 "t=0 0\r\n" +
-							 "m=audio 0 RTP/AVP 96\r\n" +
-							 "a=rtpmap:96 AppleLossless\r\n" +
-							 "a=fmtp:96 %i 0 16 40 10 14 2 255 0 0 %i\r\n" +
-							 "a=rsaaeskey:%s\r\n" +
-							 "a=aesiv:%s\r\n"),
-							(uint)rtsp_channel.client_session,
-							rtsp_channel.remote_address,
-							rtsp_channel.local_address,
-							FRAMES_PER_PACKET,
-							TIMESTAMPS_PER_SECOND,
-							rsa_aes_key,
-							bytes_to_base64(aes_iv));
-			
-		resp = yield rtsp_channel.recv_response();
-		if (resp.code != 200)
-			throw new ClientError.HANDSHAKE_FAILED(resp.message);
-			
-		// send RTSP SETUP
-		// TODO select ports for control and timing
-		var local_server_port = 6000;
-		var local_control_port = 6001;
-		var local_timing_port = 6002;
-
-		server_channel = new RTP(rtsp_channel.local_address, local_server_port);
-		control_channel = new RTP(rtsp_channel.local_address, local_control_port);
-		timing_channel = new RTP(rtsp_channel.local_address, local_timing_port);
-			
-		server_channel.uses_source_id = true;
-		control_channel.uses_timestamp = false;
-
-		//control_channel.verbose = true;
-		//timing_channel.verbose = true;
-		//server_channel.verbose = true;
-			
-		rtsp_channel.request("SETUP");
-		rtsp_channel.header("Transport",
-							"RTP/AVP/UDP;unicast;interleaved=0-1;mode=record;control_port=%i;timing_port=%i",
-							local_control_port, local_timing_port);
-		rtsp_channel.finish();
-			
-		resp = yield rtsp_channel.recv_response();
-		if (resp.code != 200)
-			throw new ClientError.HANDSHAKE_FAILED(resp.message);
-		if (!("Transport" in resp.headers))
-			throw new ClientError.HANDSHAKE_FAILED("did not get transport from server");
-			
-		var transport = resp.headers["Transport"];
-		// remote ports!
-		uint16? server_port = null;
-		uint16? control_port = null;
-		uint16? timing_port = null;
-		foreach (var part in transport.split(";"))
-		{
-			var parts = part.split("=", 2);
-			if (parts.length != 2)
-				continue;
-			if (parts[0] == "server_port")
-				server_port = (uint16)parts[1].to_int();
-			if (parts[0] == "timing_port")
-				timing_port = (uint16)parts[1].to_int();
-			if (parts[0] == "control_port")
-				control_port = (uint16)parts[1].to_int();
-		}
-			
-		if (server_port == null || timing_port == null || control_port == null)
-			throw new ClientError.HANDSHAKE_FAILED("did not get ports from server");
-			
-		server_channel.connect_to(rtsp_channel.remote_address, server_port);
-		timing_channel.connect_to(rtsp_channel.remote_address, timing_port);
-		control_channel.connect_to(rtsp_channel.remote_address, control_port);
-			
-		timing_ref_time = clock_func();			
-		timing_channel.on_packet.connect(on_timing_packet);
-		control_channel.on_packet.connect(on_resend_packet);
-						
-		// send RTSP RECORD (using seq/timestamp)
-		rtsp_channel.request("RECORD");
-		rtsp_channel.header("Range", "ntp=0-");
-		rtsp_channel.header("RTP-Info", "seq=%u;rtptime=%u", sequence, timestamp);
-		rtsp_channel.finish();
-			
-		resp = yield rtsp_channel.recv_response();
-		if (resp.code != 200)
-			throw new ClientError.HANDSHAKE_FAILED(resp.message);
-			
-		// send RTSP SET_PARAMETER to set initial volume
-		// TODO
-
-		// prepare RTP connection for audio
-		send_sync_packet(true);
-		send_audio_packet(true);
-		debug("sending audio every %ims", TIME_PER_PACKET);
-		debug("sending sync every %ims", TIMESYNC_INTERVAL);
-		var audio_time = new TimeoutSource(TIME_PER_PACKET);
-		var sync_time = new TimeoutSource(TIMESYNC_INTERVAL);
-		audio_time.set_callback(() => { send_audio_packet(false); return true; });
-		sync_time.set_callback(() => { send_sync_packet(false); return true; });
-		audio_time.attach(MainContext.default());
-		sync_time.attach(MainContext.default());
+		if (target == state)
+			return true;
 		
-		state = ClientState.READY;
+		var elevate = (target > state);
+		return_if_fail(elevate); // TODO de-elevating not yet implemented
+		
+		while (state != target)
+		{
+			bool success = false;
+			if (elevate)
+				success = yield elevate_state();
+			
+			if (!success)
+				return false;
+		}
+		
 		return true;
+	}
+	
+	private async bool elevate_state() throws Error
+	{
+		switch (state)
+		{
+		case ClientState.DISCONNECTED:
+			return_if_fail(connect_host_and_port != null);
+			yield rtsp_channel.connect_to_host_async(connect_host_and_port);
+		
+			// generate 16 random bytes for apple-challenge
+			var apple_challenge = bytes_to_base64(random_bytes(16));
+			
+			// send RTSP OPTIONS
+			rtsp_channel.request_full("OPTIONS", "*", null,
+									  Apple_Challenge: apple_challenge);
+			
+			var resp = yield rtsp_channel.recv_response();
+			if (resp.code != 200)
+				throw new ClientError.HANDSHAKE_FAILED(resp.message);
+			if ("Apple-Response" in resp.headers)
+				require_encryption = true;
+			
+			if (require_encryption)
+				debug("using encryption");
+			else
+				debug("not using encryption");
+
+			state = ClientState.CONNECTED;
+			return true;
+
+		case ClientState.CONNECTED:
+			// send RTSP ANNOUNCE
+			// TODO - use auth, if needed
+			rtsp_channel.request("ANNOUNCE");
+			rtsp_channel.header("Content-Type", "application/sdp");
+			rtsp_channel.finish(("v=0\r\n" +
+								 "o=iTunes %u O IN IP4 %s\r\n" +
+								 "s=iTunes\r\n" +
+								 "c=IN IP4 %s\r\n" +
+								 "t=0 0\r\n" +
+								 "m=audio 0 RTP/AVP 96\r\n" +
+								 "a=rtpmap:96 AppleLossless\r\n" +
+								 "a=fmtp:96 %i 0 16 40 10 14 2 255 0 0 %i\r\n" +
+								 "a=rsaaeskey:%s\r\n" +
+								 "a=aesiv:%s\r\n"),
+								(uint)rtsp_channel.client_session,
+								rtsp_channel.remote_address,
+								rtsp_channel.local_address,
+								FRAMES_PER_PACKET,
+								TIMESTAMPS_PER_SECOND,
+								rsa_aes_key,
+								bytes_to_base64(aes_iv));
+			
+			var resp = yield rtsp_channel.recv_response();
+			if (resp.code != 200)
+				throw new ClientError.HANDSHAKE_FAILED(resp.message);
+			
+			// send RTSP SETUP
+			// TODO select ports for control and timing
+			var local_server_port = 6000;
+			var local_control_port = 6001;
+			var local_timing_port = 6002;
+
+			server_channel = new RTP(rtsp_channel.local_address, local_server_port);
+			control_channel = new RTP(rtsp_channel.local_address, local_control_port);
+			timing_channel = new RTP(rtsp_channel.local_address, local_timing_port);
+			
+			server_channel.uses_source_id = true;
+			control_channel.uses_timestamp = false;
+
+			//control_channel.verbose = true;
+			//timing_channel.verbose = true;
+			//server_channel.verbose = true;
+			
+			rtsp_channel.request("SETUP");
+			rtsp_channel.header("Transport",
+								"RTP/AVP/UDP;unicast;interleaved=0-1;mode=record;control_port=%i;timing_port=%i",
+								local_control_port, local_timing_port);
+			rtsp_channel.finish();
+			
+			resp = yield rtsp_channel.recv_response();
+			if (resp.code != 200)
+				throw new ClientError.HANDSHAKE_FAILED(resp.message);
+			if (!("Transport" in resp.headers))
+				throw new ClientError.HANDSHAKE_FAILED("did not get transport from server");
+			
+			var transport = resp.headers["Transport"];
+			// remote ports!
+			uint16? server_port = null;
+			uint16? control_port = null;
+			uint16? timing_port = null;
+			foreach (var part in transport.split(";"))
+			{
+				var parts = part.split("=", 2);
+				if (parts.length != 2)
+					continue;
+				if (parts[0] == "server_port")
+					server_port = (uint16)parts[1].to_int();
+				if (parts[0] == "timing_port")
+					timing_port = (uint16)parts[1].to_int();
+				if (parts[0] == "control_port")
+					control_port = (uint16)parts[1].to_int();
+			}
+			
+			if (server_port == null || timing_port == null || control_port == null)
+				throw new ClientError.HANDSHAKE_FAILED("did not get ports from server");
+			
+			server_channel.connect_to(rtsp_channel.remote_address, server_port);
+			timing_channel.connect_to(rtsp_channel.remote_address, timing_port);
+			control_channel.connect_to(rtsp_channel.remote_address, control_port);
+			
+			timing_ref_time = clock_func();			
+			timing_channel.on_packet.connect(on_timing_packet);
+			control_channel.on_packet.connect(on_resend_packet);
+						
+			// send RTSP RECORD (using seq/timestamp)
+			rtsp_channel.request("RECORD");
+			rtsp_channel.header("Range", "ntp=0-");
+			rtsp_channel.header("RTP-Info", "seq=%u;rtptime=%u", sequence, timestamp);
+			rtsp_channel.finish();
+			
+			resp = yield rtsp_channel.recv_response();
+			if (resp.code != 200)
+				throw new ClientError.HANDSHAKE_FAILED(resp.message);
+		
+			state = ClientState.READY;
+			return true;
+		
+		case ClientState.READY:
+			// send RTSP SET_PARAMETER to set initial volume
+			// TODO
+
+			// prepare RTP connection for audio
+			send_sync_packet(true);
+			send_audio_packet(true);
+			debug("sending audio every %ims", TIME_PER_PACKET);
+			debug("sending sync every %ims", TIMESYNC_INTERVAL);
+			var audio_time = new TimeoutSource(TIME_PER_PACKET);
+			var sync_time = new TimeoutSource(TIMESYNC_INTERVAL);
+			audio_time.set_callback(() => { send_audio_packet(false); return true; });
+			sync_time.set_callback(() => { send_sync_packet(false); return true; });
+			audio_time.attach(MainContext.default());
+			sync_time.attach(MainContext.default());
+		
+			state = ClientState.PLAYING;
+			return true;
+		
+		default:
+			return_if_reached();
+		}
+	}
+
+	public bool connect_to_host(string host_and_port) throws Error
+	{
+		return_if_fail(state == ClientState.DISCONNECTED);
+		connect_host_and_port = host_and_port;
+		return transition(ClientState.CONNECTED);
+	}
+	
+	public async bool connect_to_host_async(string host_and_port) throws Error
+	{
+		return_if_fail(state == ClientState.DISCONNECTED);
+		connect_host_and_port = host_and_port;
+		return yield transition_async(ClientState.CONNECTED);
+	}
+
+	public bool play() throws Error
+	{
+		return transition(ClientState.PLAYING);
+	}
+	
+	public async bool play_async() throws Error
+	{
+		return yield transition_async(ClientState.PLAYING);
 	}
 	
 	private void send_audio_packet(bool is_first)
