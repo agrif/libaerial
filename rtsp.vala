@@ -114,7 +114,8 @@ public class RTSP : Object
 		}
 		
 		// set our session if we get a Session header
-		resp.headers.lookup_extended("Session", null, out session);
+		if ("Session" in resp.headers)
+			session = resp.headers["Session"];
 		
 		return resp;
 	}
