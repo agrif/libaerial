@@ -53,6 +53,7 @@ public class AirtunesSink : Gst.Audio.Sink
 	
 	public override bool close()
 	{
+		client.disconnect();
 		client = null;
 		return true;
 	}

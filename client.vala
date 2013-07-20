@@ -82,10 +82,10 @@ public class Client : GLib.Object
 	
 	private RingBuffer audio_buffer;
 	
-	private RTSP rtsp_channel;
-	private RTP server_channel;
-	private RTP control_channel;
-	private RTP timing_channel;
+	private RTSP? rtsp_channel = null;
+	private RTP? server_channel = null;
+	private RTP? control_channel = null;
+	private RTP? timing_channel = null;
 	
 	construct
 	{
@@ -104,9 +104,12 @@ public class Client : GLib.Object
 			audio_packets[i] = AudioPacket();
 		
 		audio_buffer = new RingBuffer();
-		audio_buffer.init(BUFFER_SIZE);
-		
-		rtsp_channel = new RTSP();
+		audio_buffer.init(BUFFER_SIZE);		
+	}
+	
+	~Client()
+	{
+		disconnect();
 	}
 	
 	private bool transition(ClientState target) throws Error
@@ -137,6 +140,9 @@ public class Client : GLib.Object
 		{
 			return yield transition_intern(target);
 		} catch (Error e) {
+			// bring the whole thing down without stopping
+			rtsp_channel = null;
+			transition(ClientState.DISCONNECTED);
 			on_error(e);
 			throw e;
 		}
@@ -148,13 +154,14 @@ public class Client : GLib.Object
 			return true;
 		
 		var elevate = (target > state);
-		return_if_fail(elevate); // TODO de-elevating not yet implemented
 		
 		while (state != target)
 		{
 			bool success = false;
 			if (elevate)
 				success = yield elevate_state();
+			else
+				success = yield deelevate_state();
 			
 			if (!success)
 				return false;
@@ -169,6 +176,7 @@ public class Client : GLib.Object
 		{
 		case ClientState.DISCONNECTED:
 			return_if_fail(connect_host_and_port != null);
+			rtsp_channel = new RTSP();
 			yield rtsp_channel.connect_to_host_async(connect_host_and_port);
 		
 			// generate 16 random bytes for apple-challenge
@@ -181,8 +189,11 @@ public class Client : GLib.Object
 			var resp = yield rtsp_channel.recv_response();
 			if (resp.code != 200)
 				throw new ClientError.HANDSHAKE_FAILED(resp.message);
+			
 			if ("Apple-Response" in resp.headers)
 				require_encryption = true;
+			else
+				require_encryption = false;
 			
 			if (require_encryption)
 				debug("using encryption");
@@ -313,6 +324,59 @@ public class Client : GLib.Object
 			return_if_reached();
 		}
 	}
+	
+	private async bool deelevate_state() throws Error
+	{
+		// special thing here: cannot throw ANY ERRORS when
+		// rtsp_channel == null. This means we're closing shop forever!
+		
+		switch (state)
+		{
+		case ClientState.PLAYING:
+			stderr.printf("TODO stop auto-packets\n");
+			
+			// send the FLUSH if rtsp_channel is still up
+			if (rtsp_channel != null)
+			{
+				rtsp_channel.request("FLUSH");
+				rtsp_channel.header("RTP-Info", "seq=%u;rtptime=%u", sequence, timestamp);
+				rtsp_channel.finish();
+				
+				var resp = yield rtsp_channel.recv_response();
+				if (resp.code != 200)
+					throw new ClientError.HANDSHAKE_FAILED(resp.message);
+			}
+			
+			state = ClientState.READY;
+			return true;
+		
+		case ClientState.READY:
+			// send TEARDOWN if rtsp_channel is still up
+			if (rtsp_channel != null)
+			{
+				rtsp_channel.request_full("TEARDOWN", null, null);
+				var resp = yield rtsp_channel.recv_response();
+				if (resp.code != 200)
+					throw new ClientError.HANDSHAKE_FAILED(resp.message);
+			}
+			
+			server_channel = null;
+			control_channel = null;
+			timing_channel = null;
+			
+			state = ClientState.CONNECTED;
+			return true;
+		
+		case ClientState.CONNECTED:
+			rtsp_channel = null;
+			
+			state = ClientState.DISCONNECTED;
+			return true;
+		
+		default:
+			return_if_reached();
+		}
+	}
 
 	public bool connect_to_host(string host_and_port) throws Error
 	{
@@ -326,6 +390,16 @@ public class Client : GLib.Object
 		return_if_fail(state == ClientState.DISCONNECTED);
 		connect_host_and_port = host_and_port;
 		return yield transition_async(ClientState.CONNECTED);
+	}
+	
+	public bool disconnect() throws Error
+	{
+		return transition(ClientState.DISCONNECTED);
+	}
+	
+	public async bool disconnect_async() throws Error
+	{
+		return yield transition_async(ClientState.DISCONNECTED);
 	}
 
 	public bool play() throws Error
