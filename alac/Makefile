@@ -4,7 +4,7 @@
 
 ifeq ($(V),)
 quiet_DOC := "Use \"$(MAKE) V=1\" to see the verbose compile lines.\n"
-quiet = @echo $(quiet_DOC)$(eval quiet_DOC:=)"  $1	$@"; $($1)
+quiet = @echo -e $(quiet_DOC)$(eval quiet_DOC:=)"  $1	$@"; $($1)
 endif
 ifeq ($(V),0)
 quiet = @echo "  $1	$@"; $($1)
