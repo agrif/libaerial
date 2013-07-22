@@ -713,9 +713,11 @@ public class Client : GLib.Object
 	}
 	
 	// native endian!! 16-bit! signed!!!
-	public size_t write(uint8[] data)
+	public size_t write(uint8[] data, out uint32 scheduled = null)
 	{
 		return_if_fail(state >= ClientState.READY);
+		scheduled = timestamp;
+		scheduled += (uint32)(audio_buffer.get_read_space() / BYTES_PER_FRAME);
 		return audio_buffer.write(data);
 	}
 	
