@@ -169,12 +169,13 @@ public class AirtunesSink : Gst.Audio.Sink
 	
 	public override uint delay()
 	{
-		return client.get_queued_samples();
+		var v = client.get_queued_samples();
+		return v;
 	}
 	
 	public override void reset()
 	{
-		//
+		stdout.printf("reset!\n");
 	}
 }
 

@@ -54,7 +54,7 @@ public class Client : GLib.Object
 	// size of buffer to use on device (in ms)
 	public uint remote_buffer_length { get; set; default = 2000; }
 	// size of buffer here (in ms)
-	public uint local_buffer_length { get; set; default = 1000; }
+	public uint local_buffer_length { get; set; default = 2000; }
 	// whether to automatically send sync packets
 	public bool auto_sync { get; set; default = true; }
 	// how far behind the current time to play samples (in ms)
