@@ -723,7 +723,9 @@ public class Client : GLib.Object
 	
 	public uint get_queued_samples()
 	{
-		var queued_remote = timestamp - estimated_timestamp();
+		uint32 queued_remote = 0;
+		if (first_sync_sent)
+			queued_remote = timestamp - estimated_timestamp();
 		var queued_local = audio_buffer.get_read_space() / BYTES_PER_FRAME;
 		return (uint)(queued_remote + queued_local);
 	}
