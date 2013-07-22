@@ -15,8 +15,95 @@ public class AirtunesSink : Gst.Audio.Sink
 		add_pad_template(sink);
 	}
 	
+	private int MAX_ART_SIZE = 200;
+	
 	public string host { get; set; default = "localhost"; }
 	private Airtunes.Client? client = null;
+	
+	private string? cur_artist = null;
+	private string? cur_album = null;
+	private string? cur_title = null;
+	
+	public override bool event(Gst.Event ev)
+	{
+		switch (ev.type)
+		{
+		case Gst.EventType.EOS:
+			//client.disconnect_from_host();
+			break;
+		case Gst.EventType.TAG:
+			Gst.TagList tags;
+			ev.parse_tag(out tags);
+			
+			string? artistp = null, albump = null, titlep = null;
+			string artist, album, title;
+			bool hasartist, hasalbum, hastitle;
+			
+			hasartist = tags.get_string(Gst.Tags.ALBUM_ARTIST, out artist);
+			if (!hasartist)
+				hasartist = tags.get_string(Gst.Tags.ARTIST, out artist);
+			hasalbum = tags.get_string(Gst.Tags.ALBUM, out album);
+			hastitle = tags.get_string(Gst.Tags.TITLE, out title);
+			
+			if (hasartist)
+				artistp = artist;
+			if (hasalbum)
+				albump = album;
+			if (hastitle)
+				titlep = title;
+			
+			Gst.Sample image;
+			bool has_image;
+			Airtunes.ImageType image_type = 0;
+			uint8[] imagedata = {};
+			has_image = tags.get_sample(Gst.Tags.IMAGE, out image);
+			if (has_image)
+			{
+				var s = image.get_caps().get_structure(0);
+				int width = 0, height = 0;
+				if (!s.get_int("width", out width) || !s.get_int("height", out height))
+				{
+					has_image = false;
+				} else {
+					if (width > MAX_ART_SIZE || height > MAX_ART_SIZE)
+						has_image = false;
+				}
+				
+				switch (s.get_name())
+				{
+				case "image/jpeg":
+					image_type = Airtunes.ImageType.JPEG;
+					break;
+				case "image/png":
+					image_type = Airtunes.ImageType.PNG;
+					break;
+				default:
+					has_image = false;
+					break;
+				}
+				
+				if (has_image)
+				{
+					var b = image.get_buffer();
+					imagedata.resize((int)b.get_size());
+					b.extract(0, imagedata, imagedata.length);
+				}
+			}
+			
+			if (artistp != cur_artist || titlep != cur_title || albump != cur_album)
+			{
+				client.set_metadata(titlep, artistp, albump);
+				if (has_image)
+					client.set_artwork(image_type, imagedata);
+				cur_artist = artistp;
+				cur_title = titlep;
+				cur_album = albump;
+			}
+			break;
+		}
+		
+		return base.event(ev);
+	}
 	
 	public override bool open()
 	{
@@ -44,14 +131,8 @@ public class AirtunesSink : Gst.Audio.Sink
 	{
 		try
 		{
-			uint8[] buffer;
-			FileUtils.get_data("cover.jpg", out buffer);
-			
 			client.play();
-			client.set_volume(0.75f);
-			client.set_metadata("Slinger's Song", "Darren Korb", "Bastion OST");
-			client.set_artwork(Airtunes.ImageType.JPEG, buffer);
-			client.set_progress(246.0f, 0.0f);
+			client.set_volume(1.0f);
 			return true;
 		} catch (Error e) {
 			return false;

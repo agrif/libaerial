@@ -176,7 +176,6 @@ public class RTSP : Object
 		return send_line(s);
 	}
 	
-	[PrintfFormat]
 	public bool finish(string? format=null, ...) throws IOError
 	{
 		var l = va_list();
