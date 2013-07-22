@@ -45,6 +45,8 @@ public class AirtunesSink : Gst.Audio.Sink
 		try
 		{
 			client.play();
+			client.set_volume(0.75f);
+			client.set_metadata("Downstream", "Shira Kammen", "Music from Braid");
 			return true;
 		} catch (Error e) {
 			return false;

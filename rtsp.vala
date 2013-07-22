@@ -181,23 +181,23 @@ public class RTSP : Object
 	{
 		var l = va_list();
 		if (format == null)
-			return finish_raw(null);
-		return finish_raw(format.vprintf(l));
+			return send_line("");
+		
+		var body = format.vprintf(l);
+		log(LOGDOMAIN, LogLevelFlags.LEVEL_DEBUG, "body: %s", body);
+		if (body == null)
+			return send_line("");
+		return finish_raw(body.data);
 	}
 	
-	public bool finish_raw(string? data=null) throws IOError
+	public bool finish_raw(uint8[] data) throws IOError
 	{
-		if (data == null)
-		{
-			return send_line("");			
-		}
-		
 		var b = header("Content-Length", "%u", (uint)data.length) && send_line("");
 		if (!b)
 			return b;
 		
-		log(LOGDOMAIN, LogLevelFlags.LEVEL_DEBUG, "body: %s", data);
-		return output.put_string(data);
+		
+		return output.write(data) == data.length;
 	}
 }
 

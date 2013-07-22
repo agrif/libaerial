@@ -1,4 +1,4 @@
-SOURCES=main.vala binary.vala client.vala rtp.vala crypto.vala ring-buffer.vala rtsp.vala
+SOURCES=main.vala binary.vala client.vala rtp.vala crypto.vala ring-buffer.vala rtsp.vala dmap.vala
 TARGET=test
 LDFLAGS=`pkg-config --libs gio-2.0 nettle` -L./alac/ -lalac
 

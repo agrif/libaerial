@@ -322,9 +322,6 @@ public class Client : GLib.Object
 			return true;
 		
 		case ClientState.READY:
-			// send RTSP SET_PARAMETER to set initial volume
-			// TODO
-
 			// prepare RTP connection for audio
 			if (auto_sync)
 			{
@@ -423,6 +420,66 @@ public class Client : GLib.Object
 		}
 	}
 
+	private bool set_parameter(uint32? tstamp, string content_type, uint8[] body) throws Error
+	{
+		var loop = new MainLoop();
+		bool ret = false;
+		Error? err = null;
+		set_parameter_async.begin(tstamp, content_type, body, (obj, res) =>
+			{
+				try
+				{
+					ret = set_parameter_async.end(res);
+				} catch (Error e) {
+					err = e;
+				}
+				loop.quit();
+			});
+		loop.run();
+		
+		if (err != null)
+			throw err;
+		return ret;
+	}
+	
+	private async bool set_parameter_async(uint32? tstamp, string content_type, uint8[] body) throws Error
+	{
+		try
+		{
+			return yield set_parameter_intern(tstamp, content_type, body);
+		} catch (Error e) {
+			// bring the whole thing down without stopping
+			rtsp_channel = null;
+			try
+			{
+				transition(ClientState.DISCONNECTED);
+			} catch (Error se) {
+				// this should always, always work, so...
+				return_if_reached();
+			}
+			on_error(e);
+			throw e;
+		}
+	}
+	
+	private async bool set_parameter_intern(uint32? tstamp, string content_type, uint8[] body) throws Error
+	{
+		return_if_fail(state >= ClientState.READY);
+		
+		if (tstamp == null)
+			tstamp = timestamp + (uint32)(audio_buffer.get_read_space() / BYTES_PER_FRAME);
+		
+		rtsp_channel.request("SET_PARAMETER");
+		rtsp_channel.header("RTP-Info", "rtptime=%u", tstamp);
+		rtsp_channel.header("Content-Type", content_type);
+		rtsp_channel.finish_raw(body);
+		
+		var resp = yield rtsp_channel.recv_response();
+		if (resp.code != 200)
+			throw new ClientError.HANDSHAKE_FAILED("could not SET_PARAMETER");
+		return true;
+	}
+
 	public bool connect_to_host(string host_and_port) throws Error
 	{
 		return_if_fail(state == ClientState.DISCONNECTED);
@@ -469,6 +526,68 @@ public class Client : GLib.Object
 		if (state == ClientState.PLAYING)
 			return yield transition_async(ClientState.READY);
 		return true;
+	}
+	
+	private float get_dbvol(float volume)
+	{
+		var dbvol = -30.0f + (30.0f * volume);
+		if (dbvol <= -30.0f)
+			dbvol = -144.0f; // muted
+		if (dbvol >= 0.0f)
+			dbvol = 0.0f;
+		return dbvol;
+	}
+	
+	// between 0 and 1
+	public bool set_volume(float volume, uint32? tstamp = null) throws Error
+	{
+		var dbvol = get_dbvol(volume);
+		var body = "volume: %f\r\n".printf(dbvol);
+		return set_parameter(tstamp, "text/parameters", body.data);
+	}
+
+	public async bool set_volume_async(float volume, uint32? tstamp=null) throws Error
+	{
+		var dbvol = get_dbvol(volume);
+		var body = "volume: %f\r\n".printf(dbvol);
+		return yield set_parameter_async(tstamp, "text/parameters", body.data);
+	}
+	
+	private uint8[] dmap_metadata(string? title, string? artist, string? album) throws Error
+	{
+		var dmap = DMAP();
+		dmap.init();
+		dmap.start_container("mlit");
+		if (title != null)
+			dmap.put_string("minm", title);
+		if (artist != null)
+			dmap.put_string("asar", artist);
+		if (album != null)
+			dmap.put_string("asal", album);
+		dmap.end_container();
+		dmap.close();
+		var metadata = dmap.steal_data();
+		
+		string buf = "";
+		foreach (var b in metadata)
+		{
+			buf += "%02x ".printf(b);
+		}
+		log(LOGDOMAIN, LogLevelFlags.LEVEL_DEBUG, "DMAP metadata: %s", buf);
+		
+		return metadata;
+	}
+	
+	public bool set_metadata(string? title=null, string? artist=null, string? album=null, uint32? tstamp=null) throws Error
+	{
+		var body = dmap_metadata(title, artist, album);
+		return set_parameter(tstamp, "application/x-dmap-tagged", body);
+	}
+	
+	public async bool set_metadata_async(string? title=null, string? artist=null, string? album=null, uint32? tstamp=null) throws Error
+	{
+		var body = dmap_metadata(title, artist, album);
+		return yield set_parameter_async(tstamp, "application/x-dmap-tagged", body);
 	}
 	
 	private void send_audio_packet()
