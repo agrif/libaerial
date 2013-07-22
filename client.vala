@@ -56,6 +56,9 @@ public class Client : GLib.Object
 	public uint delay { get; set; default = 1000; }
 	// connection state
 	public ClientState state { get; private set; default = ClientState.DISCONNECTED; }
+	// called for all errors, even those that propogate to the caller
+	// (in addition to the asynchronously-caused ones)
+	// by the time this is called, an appropriate state de-elevation has occurred
 	public signal void on_error(Error e);
 	
 	// set by connect_to_host
@@ -253,13 +256,13 @@ public class Client : GLib.Object
 			control_channel = new RTP(rtsp_channel.local_address, local_control_port);
 			timing_channel = new RTP(rtsp_channel.local_address, local_timing_port);
 			
+			server_channel.on_error.connect(on_channel_error);
+			control_channel.on_error.connect(on_channel_error);
+			timing_channel.on_error.connect(on_channel_error);
+			
 			server_channel.uses_source_id = true;
 			control_channel.uses_timestamp = false;
 
-			//control_channel.verbose = true;
-			//timing_channel.verbose = true;
-			//server_channel.verbose = true;
-			
 			rtsp_channel.request("SETUP");
 			rtsp_channel.header("Transport",
 								"RTP/AVP/UDP;unicast;interleaved=0-1;mode=record;control_port=%i;timing_port=%i",
@@ -606,6 +609,17 @@ public class Client : GLib.Object
 		microsecs *= (uint64)1 << 32;
 		microsecs /= 1000000;
 		return (seconds << 32) | (microsecs & 0xffffffff);
+	}
+	
+	private void on_channel_error(RTP c, Error e)
+	{
+		try
+		{
+			transition(ClientState.CONNECTED);
+			on_error(e);
+		} catch (Error se) {
+			// handled in transition
+		}
 	}
 	
 	private void on_resend_packet(RTP c, RTPPacket p, DataInputStream dat)

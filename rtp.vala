@@ -16,6 +16,8 @@ public struct RTPPacket
 
 public class RTP : Object
 {	
+	private const string LOGDOMAIN = "AirtunesRTP";
+	
 	public string local_host { get; construct; }
 	public uint local_port { get; construct; }
 	private string remote_host;
@@ -23,9 +25,10 @@ public class RTP : Object
 	
 	public bool uses_source_id { get; set; default = false; }
 	public bool uses_timestamp { get; set; default = true; }
-	public bool verbose { get; set; default = false; }
 	
 	public signal void on_packet(RTPPacket packet, DataInputStream payload);
+	// only used when an error occurs while trying to receive a packet
+	public signal void on_error(Error e);
 	
 	private Socket socket;
 	private Error? construct_error = null;
@@ -40,8 +43,7 @@ public class RTP : Object
 			
 			socket.bind(local_sa, true);
 			
-			if (verbose)
-				debug("bound to UDP port %u", local_port);
+			log(LOGDOMAIN, LogLevelFlags.LEVEL_DEBUG, "bound to UDP port %u", local_port);
 			
 			var source = socket.create_source(IOCondition.IN);
 			source.set_callback((s, cond) =>
@@ -52,15 +54,14 @@ public class RTP : Object
 						buffer.resize(4096);
 						var read = s.receive(buffer);
 						buffer.length = (int)read;
-						if (verbose)
-							debug("received %i bytes on port %u", (int)read, local_port);
+						log(LOGDOMAIN, LogLevelFlags.LEVEL_DEBUG, "received %i bytes on port %u", (int)read, local_port);
 						
 						dump_buffer(buffer);
 						
 						handle_packet(buffer);
 					} catch (Error e) {
-						// TODO proper error reporting
-						stderr.printf(e.message);
+						on_error(e);
+						return false;
 					}
 					return true;
 				});
@@ -88,20 +89,19 @@ public class RTP : Object
 	
 	private void dump_buffer(uint8[] buffer)
 	{
-		if (!verbose)
-			return;
-		
 		var build = "";
 		foreach (var byte in buffer)
 		{
 			build += "%02x ".printf(byte);
 			if (build.length >= 16 * 3)
 			{
+				log(LOGDOMAIN, LogLevelFlags.LEVEL_DEBUG, build);
 				debug(build);
 				build = "";
 			}
 		}
 		if (build.length > 0)
+			log(LOGDOMAIN, LogLevelFlags.LEVEL_DEBUG, build);
 			debug(build);
 	}
 	
@@ -132,8 +132,7 @@ public class RTP : Object
 		
 		uint8[] buffer = ostream.steal_data();
 		buffer.length = (int)ostream.get_data_size();
-		if (verbose)
-			debug("writing %i bytes from port %u -> %s:%u", buffer.length, local_port, remote_host, remote_port);
+		log(LOGDOMAIN, LogLevelFlags.LEVEL_DEBUG, "writing %i bytes from port %u -> %s:%u", buffer.length, local_port, remote_host, remote_port);
 		dump_buffer(buffer);
 		socket.send(buffer);
 		return buffer;
