@@ -10,6 +10,12 @@ public errordomain ClientError
 
 public delegate int64 ClockFunc();
 
+public enum ImageType
+{
+	PNG,
+	JPEG,
+}
+
 public enum ClientState
 {
 	// when first created, and after disconnection/error
@@ -46,14 +52,14 @@ public class Client : GLib.Object
 	// units are in microseconds! 1000000μs == 1s
 	public ClockFunc clock_func { get; set; default = get_monotonic_time; }
 	// size of buffer to use on device (in ms)
-	public uint remote_buffer_length { get; set; default = 1000; }
+	public uint remote_buffer_length { get; set; default = 2000; }
 	// size of buffer here (in ms)
 	public uint local_buffer_length { get; set; default = 1000; }
 	// whether to automatically send sync packets
 	public bool auto_sync { get; set; default = true; }
 	// how far behind the current time to play samples (in ms)
 	// only useful when auto_sync is true
-	public uint delay { get; set; default = 1000; }
+	public uint delay { get; set; default = 2000; }
 	// connection state
 	public ClientState state { get; private set; default = ClientState.DISCONNECTED; }
 	// called for all errors, even those that propogate to the caller
@@ -588,6 +594,56 @@ public class Client : GLib.Object
 	{
 		var body = dmap_metadata(title, artist, album);
 		return yield set_parameter_async(tstamp, "application/x-dmap-tagged", body);
+	}
+	
+	private string get_mime(ImageType type)
+	{
+		string content_type;
+		switch (type)
+		{
+		case ImageType.PNG:
+			content_type = "image/png";
+			break;
+		case ImageType.JPEG:
+			content_type = "image/jpeg";
+			break;
+		default:
+			return_if_reached();
+		}
+		return content_type;
+	}
+	
+	public bool set_artwork(ImageType type, uint8[] data, uint32? tstamp=null) throws Error
+	{
+		return set_parameter(tstamp, get_mime(type), data);
+	}
+	
+	public async bool set_artwork_async(ImageType type, uint8[] data, uint32? tstamp=null) throws Error
+	{
+		return yield set_parameter_async(tstamp, get_mime(type), data);
+	}
+	
+	// times are in seconds!
+	public bool set_progress(float length, float current, uint32? tstamp=null) throws Error
+	{
+		if (tstamp == null)
+			tstamp = timestamp + (uint32)(audio_buffer.get_read_space() / BYTES_PER_FRAME);
+		
+		var start = tstamp - (uint32)(current * FRAMES_PER_SECOND);
+		var end = start + (uint32)(length * FRAMES_PER_SECOND);
+		var progress = "progress: %u/%u/%u\r\n".printf(start, tstamp, end);
+		return set_parameter(tstamp, "text/parameters", progress.data);
+	}
+	
+	public async bool set_progress_async(float length, float current, uint32? tstamp=null) throws Error
+	{
+		if (tstamp == null)
+			tstamp = timestamp + (uint32)(audio_buffer.get_read_space() / BYTES_PER_FRAME);
+		
+		var start = tstamp - (uint32)(current * FRAMES_PER_SECOND);
+		var end = start + (uint32)(length * FRAMES_PER_SECOND);
+		var progress = "progress: %u/%u/%u\r\n".printf(start, tstamp, end);
+		return yield set_parameter_async(tstamp, "text/parameters", progress.data);
 	}
 	
 	private void send_audio_packet()

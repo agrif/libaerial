@@ -33,7 +33,7 @@ public class AirtunesSink : Gst.Audio.Sink
 		try
 		{
 			stdout.printf("connecting to %s\n", host);
-			client.connect_to_host(host);
+			client.connect_to_host(host);			
 			return true;
 		} catch (Error e) {
 			return false;
@@ -44,9 +44,14 @@ public class AirtunesSink : Gst.Audio.Sink
 	{
 		try
 		{
+			uint8[] buffer;
+			FileUtils.get_data("cover.jpg", out buffer);
+			
 			client.play();
 			client.set_volume(0.75f);
-			client.set_metadata("Downstream", "Shira Kammen", "Music from Braid");
+			client.set_metadata("Slinger's Song", "Darren Korb", "Bastion OST");
+			client.set_artwork(Airtunes.ImageType.JPEG, buffer);
+			client.set_progress(246.0f, 0.0f);
 			return true;
 		} catch (Error e) {
 			return false;
