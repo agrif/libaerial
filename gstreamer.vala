@@ -76,7 +76,7 @@ public class AirtunesSink : Gst.Audio.Sink
 	
 	public override int write(uint8[] data)
 	{
-		return (int)client.write_raw(data);
+		return (int)client.write(data);
 	}
 	
 	public override uint delay()

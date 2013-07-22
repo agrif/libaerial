@@ -712,8 +712,8 @@ public class Client : GLib.Object
 		}		
 	}
 	
-	// native endian!!
-	public size_t write_raw(uint8[] data)
+	// native endian!! 16-bit! signed!!!
+	public size_t write(uint8[] data)
 	{
 		return_if_fail(state >= ClientState.READY);
 		return audio_buffer.write(data);
