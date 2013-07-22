@@ -116,7 +116,7 @@ public class Client : GLib.Object
 	
 	~Client()
 	{
-		disconnect();
+		disconnect_from_host();
 	}
 	
 	private bool transition(ClientState target) throws Error
@@ -434,12 +434,12 @@ public class Client : GLib.Object
 		return yield transition_async(ClientState.CONNECTED);
 	}
 	
-	public bool disconnect() throws Error
+	public bool disconnect_from_host() throws Error
 	{
 		return transition(ClientState.DISCONNECTED);
 	}
 	
-	public async bool disconnect_async() throws Error
+	public async bool disconnect_from_host_async() throws Error
 	{
 		return yield transition_async(ClientState.DISCONNECTED);
 	}
@@ -452,6 +452,20 @@ public class Client : GLib.Object
 	public async bool play_async() throws Error
 	{
 		return yield transition_async(ClientState.PLAYING);
+	}
+	
+	public bool stop() throws Error
+	{
+		if (state == ClientState.PLAYING)
+			return transition(ClientState.READY);
+		return true;
+	}
+	
+	public async bool stop_async() throws Error
+	{
+		if (state == ClientState.PLAYING)
+			return yield transition_async(ClientState.READY);
+		return true;
 	}
 	
 	private void send_audio_packet()

@@ -34,7 +34,6 @@ public class AirtunesSink : Gst.Audio.Sink
 		{
 			stdout.printf("connecting to %s\n", host);
 			client.connect_to_host(host);
-			client.play();
 			return true;
 		} catch (Error e) {
 			return false;
@@ -43,19 +42,36 @@ public class AirtunesSink : Gst.Audio.Sink
 	
 	public override bool prepare(Gst.Audio.RingBufferSpec spec)
 	{
-		return true;
+		try
+		{
+			client.play();
+			return true;
+		} catch (Error e) {
+			return false;
+		}
 	}
 	
 	public override bool unprepare()
 	{
+		try
+		{
+			client.stop();
+		} catch (Error e) {
+			return false;
+		}
 		return true;
 	}
 	
 	public override bool close()
 	{
-		client.disconnect();
-		client = null;
-		return true;
+		try
+		{
+			client.disconnect_from_host();
+			client = null;
+			return true;
+		} catch (Error e) {
+			return false;
+		}
 	}
 	
 	public override int write(uint8[] data)
@@ -74,7 +90,7 @@ public class AirtunesSink : Gst.Audio.Sink
 	}
 }
 
-static bool plugin_init(Gst.Plugin plugin)
+public static bool plugin_init(Gst.Plugin plugin)
 {
 	return Gst.Element.register(plugin, "airtunes", Gst.Rank.NONE, typeof(AirtunesSink));
 }
