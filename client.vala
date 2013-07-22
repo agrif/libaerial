@@ -32,22 +32,28 @@ private struct AudioPacket
 public class Client : GLib.Object
 {
 	private const int FRAMES_PER_PACKET = 352;
-	private const int SHORTS_PER_PACKET = 2 * FRAMES_PER_PACKET;
-	private const int TIMESTAMPS_PER_SECOND = 44100;
-	private const int TIMESYNC_INTERVAL = 1000;
-	private const int TIME_PER_PACKET = (FRAMES_PER_PACKET * 1000 / TIMESTAMPS_PER_SECOND) - 1;
-	private const int PACKET_BACKLOG = 1000;
-	private const int BUFFER_SECONDS = 2;
-	private const int MAX_DELTA = 10 * FRAMES_PER_PACKET;
-	
+	private const int BYTES_PER_FRAME = 4;
+	private const int BYTES_PER_PACKET = BYTES_PER_FRAME * FRAMES_PER_PACKET;
+	private const int FRAMES_PER_SECOND = 44100;
+	private const int SYNC_INTERVAL = 1000;
+	private const int TIME_PER_PACKET = (FRAMES_PER_PACKET * 1000 / FRAMES_PER_SECOND) - 1;
+	private const int PACKET_BACKLOG = 1024;	
 	private const int64 NTP_EPOCH = 0x83aa7e80;
 	
-	private const int BUFFER_SIZE = 2 * SHORTS_PER_PACKET * 50;
-	
+	private const string LOGDOMAIN = "AirtunesClient";
+
 	// used to get a monotonic time
 	// units are in microseconds! 1000000μs == 1s
-	// if not set, we use GLib.get_monotonic_time()
 	public ClockFunc clock_func { get; set; default = get_monotonic_time; }
+	// size of buffer to use on device (in ms)
+	public uint remote_buffer_length { get; set; default = 1000; }
+	// size of buffer here (in ms)
+	public uint local_buffer_length { get; set; default = 1000; }
+	// whether to automatically send sync packets
+	public bool auto_sync { get; set; default = true; }
+	// how far behind the current time to play samples (in ms)
+	// only useful when auto_sync is true
+	public uint delay { get; set; default = 1000; }
 	// connection state
 	public ClientState state { get; private set; default = ClientState.DISCONNECTED; }
 	public signal void on_error(Error e);
@@ -62,16 +68,18 @@ public class Client : GLib.Object
 	// whether the remote requires encryption
 	private bool require_encryption = false;
 	
+	// our timers!
+	private TimeoutSource? sync_source = null;
+	private TimeoutSource? audio_source = null;
+	// whether we've sent a sync/audio packet yet
+	private bool first_sync_sent = false;
+	private bool first_audio_sent = false;
 	// reference time for when the channels opened
 	private int64 timing_ref_time;
-	// number of frames written since last sync
-	private uint32 frames_since_sync;
 	// when the last sync packet was emitted
 	private int64 last_sync_time;
 	// what timestamp the last sync packet had
 	private uint32 last_sync_timestamp;
-	// how many timestamps ahead the audio packets are
-	private int32 timestamp_delta;
 	
 	// previously-sent audio packets
 	private AudioPacket[] audio_packets;
@@ -103,8 +111,7 @@ public class Client : GLib.Object
 		for (var i = 0; i < audio_packets.length; i++)
 			audio_packets[i] = AudioPacket();
 		
-		audio_buffer = new RingBuffer();
-		audio_buffer.init(BUFFER_SIZE);		
+		audio_buffer = RingBuffer();
 	}
 	
 	~Client()
@@ -142,7 +149,13 @@ public class Client : GLib.Object
 		} catch (Error e) {
 			// bring the whole thing down without stopping
 			rtsp_channel = null;
-			transition(ClientState.DISCONNECTED);
+			try
+			{
+				transition(ClientState.DISCONNECTED);
+			} catch (Error se) {
+				// this should always, always work, so...
+				return_if_reached();
+			}
 			on_error(e);
 			throw e;
 		}
@@ -196,9 +209,9 @@ public class Client : GLib.Object
 				require_encryption = false;
 			
 			if (require_encryption)
-				debug("using encryption");
+				log(LOGDOMAIN, LogLevelFlags.LEVEL_DEBUG, "using encryption");
 			else
-				debug("not using encryption");
+				log(LOGDOMAIN, LogLevelFlags.LEVEL_DEBUG, "not using encryption");
 
 			state = ClientState.CONNECTED;
 			return true;
@@ -222,7 +235,7 @@ public class Client : GLib.Object
 								rtsp_channel.remote_address,
 								rtsp_channel.local_address,
 								FRAMES_PER_PACKET,
-								TIMESTAMPS_PER_SECOND,
+								FRAMES_PER_SECOND,
 								rsa_aes_key,
 								bytes_to_base64(aes_iv));
 			
@@ -284,7 +297,9 @@ public class Client : GLib.Object
 			timing_channel.connect_to(rtsp_channel.remote_address, timing_port);
 			control_channel.connect_to(rtsp_channel.remote_address, control_port);
 			
-			timing_ref_time = clock_func();			
+			timing_ref_time = clock_func();
+			first_sync_sent = false;
+			first_audio_sent = false;
 			timing_channel.on_packet.connect(on_timing_packet);
 			control_channel.on_packet.connect(on_resend_packet);
 						
@@ -297,6 +312,8 @@ public class Client : GLib.Object
 			resp = yield rtsp_channel.recv_response();
 			if (resp.code != 200)
 				throw new ClientError.HANDSHAKE_FAILED(resp.message);
+			
+			audio_buffer.init((local_buffer_length * FRAMES_PER_SECOND / 1000) * BYTES_PER_FRAME);
 		
 			state = ClientState.READY;
 			return true;
@@ -306,16 +323,33 @@ public class Client : GLib.Object
 			// TODO
 
 			// prepare RTP connection for audio
-			send_sync_packet(true);
-			send_audio_packet(true);
-			debug("sending audio every %ims", TIME_PER_PACKET);
-			debug("sending sync every %ims", TIMESYNC_INTERVAL);
-			var audio_time = new TimeoutSource(TIME_PER_PACKET);
-			var sync_time = new TimeoutSource(TIMESYNC_INTERVAL);
-			audio_time.set_callback(() => { send_audio_packet(false); return true; });
-			sync_time.set_callback(() => { send_sync_packet(false); return true; });
-			audio_time.attach(MainContext.default());
-			sync_time.attach(MainContext.default());
+			if (auto_sync)
+			{
+				var startsync = timestamp - (uint32)(delay * FRAMES_PER_SECOND / 1000);
+				log(LOGDOMAIN, LogLevelFlags.LEVEL_DEBUG, "auto-sync starting at timestamp %u", startsync);
+				sync(startsync);
+				sync_source = new TimeoutSource(SYNC_INTERVAL);
+				sync_source.set_callback(() =>
+					{
+						try
+						{
+							var est = estimated_timestamp();
+							var rb = (float)(timestamp - est) / FRAMES_PER_SECOND;
+							var lb = (float)(audio_buffer.get_read_space() / BYTES_PER_FRAME) / FRAMES_PER_SECOND;
+							log(LOGDOMAIN, LogLevelFlags.LEVEL_DEBUG, "auto-sync timestamp %u remote-buffer %fms local-buffer %fms", est, rb * 1000, lb * 1000);
+							sync(estimated_timestamp());
+						} catch (Error e) {
+							// handled within sync already
+						}
+						return true;
+					});
+				sync_source.attach(MainContext.default());
+			}
+
+			send_audio_packet();
+			audio_source  = new TimeoutSource(TIME_PER_PACKET);
+			audio_source.set_callback(() => { send_audio_packet(); return true; });
+			audio_source.attach(MainContext.default());
 		
 			state = ClientState.PLAYING;
 			return true;
@@ -333,7 +367,15 @@ public class Client : GLib.Object
 		switch (state)
 		{
 		case ClientState.PLAYING:
-			stderr.printf("TODO stop auto-packets\n");
+			// reset sync/audio state
+			first_sync_sent = false;
+			first_audio_sent = false;
+			if (audio_source != null)
+				audio_source.destroy();
+			if (sync_source != null)
+				sync_source.destroy();
+			audio_source = null;
+			sync_source = null;
 			
 			// send the FLUSH if rtsp_channel is still up
 			if (rtsp_channel != null)
@@ -412,19 +454,21 @@ public class Client : GLib.Object
 		return yield transition_async(ClientState.PLAYING);
 	}
 	
-	private void send_audio_packet(bool is_first)
+	private void send_audio_packet()
 	{
-		// if we're ahead by 10+ packets, ignore this
-		if (!is_first && (int)timestamp_delta > MAX_DELTA)
-		{
-			timestamp_delta -= FRAMES_PER_PACKET;
+		return_if_fail(server_channel != null);
+		
+		// delay until first sync is sent
+		if (!first_sync_sent)
 			return;
-		}
+		
+		// if we're ahead of the allowed device buffer, skiy
+		if (timestamp - estimated_timestamp() > remote_buffer_length * FRAMES_PER_SECOND / 1000)
+			return;
 		
 		// if we don't have data, also ignore this
-		if (audio_buffer.get_read_space() < 2 * SHORTS_PER_PACKET)
+		if (audio_buffer.get_read_space() < BYTES_PER_PACKET)
 		{
-			stdout.printf("buffer underrun\n");
 			return;
 		}
 		
@@ -433,27 +477,23 @@ public class Client : GLib.Object
 			padding = false,
 			extension = false,
 			source_id_count = 0,
-			marker = is_first,
+			marker = !first_audio_sent,
 			payload_type = 96,
 			sequence = sequence,
 			timestamp = timestamp,
 			source_id = rtsp_channel.client_session
 		};
 		
-		// +16 for the ALAC header
-		var data_size = 2 * SHORTS_PER_PACKET;
 		uint8[] frames = {};
-		frames.resize(data_size);
+		frames.resize(BYTES_PER_PACKET);
 		uint8[] payload;
 		audio_buffer.read(frames);
 		if (!alac_encode(frames, out payload))
 		{
-			// TODO error
-			stderr.printf("encode fail\n");
-			return;
+			// we should never fail at *encoding*
+			return_if_reached();
 		}
 		timestamp += FRAMES_PER_PACKET;
-		frames_since_sync += FRAMES_PER_PACKET;
 		
 		if (require_encryption)
 			payload = aes_encrypt(aes_key, aes_iv, payload);
@@ -467,73 +507,80 @@ public class Client : GLib.Object
 			audio_packets[i].sequence = sequence;
 			audio_packets[i].data = data;
 			sequence++;
+			
+			first_audio_sent = true;
 		} catch (Error e) {
-			// TODO error handling
-			stderr.printf(e.message);
+			try
+			{
+				transition(ClientState.CONNECTED);
+			} catch (Error se) {
+				// handled in transition
+			}
+			on_error(e);
 		}
 	}
 	
-	private void send_sync_packet(bool is_first)
+	public bool sync(uint32 sync_timestamp) throws Error
 	{
-		if (is_first)
-		{
-			last_sync_time = clock_func();
-			last_sync_timestamp = timestamp;
-			timestamp_delta = 0;
-		}
+		return_if_fail(control_channel != null);
 		
-		var projected_timestamp = last_sync_timestamp;
-		var now = clock_func();
-		if (now > last_sync_time)
-		{
-			var delta = now - last_sync_time;
-			projected_timestamp = (uint32)(last_sync_timestamp + (TIMESTAMPS_PER_SECOND * delta / 1000000));
-			timestamp_delta = (int32)timestamp - (int32)projected_timestamp;
-		}
-			
+		var ostream = new MemoryOutputStream(null, realloc, free);
+		var odat = new DataOutputStream(ostream);
+		odat.put_uint64(get_ntp_time());
+		odat.put_uint32(timestamp);
+		odat.close();
+		
+		uint8[] payload = ostream.steal_data();
+		payload.length = (int)ostream.get_data_size();
+		
+		var outp = RTPPacket() {
+			version = 2,
+			padding = false,
+			extension = !first_sync_sent,
+			source_id_count = 0,
+			marker = true,
+			payload_type = 84,
+			sequence = 7, // yes, on purpose. ewwwwww
+			timestamp = sync_timestamp,
+			source_id = null
+		};
+		
+		// okay so here's the (assumed) deal with this packet
+		// the RTP header timestamp is the one that should be playing
+		// RIGHT NOW, as defined by the now() time in the ntptime.
+		// the payload timestamp after that is the next one we'll send
+		
+		// the RIGHT NOW timestamp should be very carefully calculated
+		// so that as close to FRAMES_PER_SECOND pass every second
+		// and (importantly!) should be independent of the audio packet rate
+		// or you'll get skipping!
+		
 		try
 		{
-			var ostream = new MemoryOutputStream(null, realloc, free);
-			var odat = new DataOutputStream(ostream);
-			odat.put_uint64(get_ntp_time());
-			odat.put_uint32(timestamp);
-			odat.close();
-			
-			uint8[] payload = ostream.steal_data();
-			payload.length = (int)ostream.get_data_size();
-			
-			var outp = RTPPacket() {
-				version = 2,
-				padding = false,
-				extension = is_first,
-				source_id_count = 0,
-				marker = true,
-				payload_type = 84,
-				sequence = 7, // yes, on purpose. ewwwwww
-				timestamp = projected_timestamp - BUFFER_SECONDS * TIMESTAMPS_PER_SECOND,
-				source_id = null
-			};
-			
-			// okay so here's the (assumed) deal with this packet
-			// the RTP header timestamp is the one that should be playing
-			// RIGHT NOW, as defined by the now() time in the ntptime.
-			// the payload timestamp after that is the next one we'll send
-			
-			// the RIGHT NOW timestamp should be very carefully calculated
-			// so that as close to TIMESTAMPS_PER_SECOND pass every second
-			// and (importantly!) should be independent of the audio packet rate
-			// or you'll get skipping!
-			
-			debug("sync current: %u projected: %u delta: %i", timestamp, projected_timestamp, timestamp_delta);
-			stdout.printf("sync current: %u projected: %u delta: %i\n", timestamp, projected_timestamp, timestamp_delta);
 			control_channel.send(outp, payload);
-			last_sync_time = now;
-			last_sync_timestamp = projected_timestamp;
-			frames_since_sync = 0;
+			first_sync_sent = true;
+			last_sync_time = clock_func();
+			last_sync_timestamp = sync_timestamp;
 		} catch (Error e) {
-			// TODO error
-			stderr.printf(e.message);
+			try
+			{
+				transition(ClientState.CONNECTED);
+			} catch (Error se) {
+				// handled in transition
+			}
+			on_error(e);
+			throw e;
 		}
+		
+		return true;
+	}
+	
+	public uint32 estimated_timestamp()
+	{
+		return_if_fail(first_sync_sent);
+		var now = clock_func();
+		var tsdelta = (now - last_sync_time) * FRAMES_PER_SECOND / 1000000;
+		return last_sync_timestamp + (uint32)tsdelta;
 	}
 	
 	private uint64 get_ntp_time()
@@ -569,23 +616,25 @@ public class Client : GLib.Object
 		{
 			var first_seq = dat.read_uint16();
 			var count = dat.read_uint16();
-			print("!!!!! error count %u\n", count);
 			for (var s = first_seq; s < first_seq + count; s++)
 			{
 				var i = s % audio_packets.length;
 				if (audio_packets[i].in_use && audio_packets[i].sequence == s)
 				{
-					debug("resending packet %u", s);
-					stdout.printf("resending packet %u\n", s);
+					log(LOGDOMAIN, LogLevelFlags.LEVEL_DEBUG, "resending packet %u", s);
 					c.send(outp, audio_packets[i].data);
 				} else {
-					debug("packet %u requested but not found", s);
-					stdout.printf("packet %u requested but not found\n", s);
+					log(LOGDOMAIN, LogLevelFlags.LEVEL_DEBUG, "packet %u requested but not found", s);
 				}
 			}
 		} catch (Error e) {
-			// TODO error
-			stderr.printf(e.message);
+			try
+			{
+				transition(ClientState.CONNECTED);
+			} catch (Error se) {
+				// handled in transition
+			}
+			on_error(e);
 		}
 	}
 	
@@ -625,14 +674,20 @@ public class Client : GLib.Object
 			payload.length = (int)ostream.get_data_size();
 			c.send(outp, payload);
 		} catch (Error e) {
-			// TODO error handling!
-			stderr.printf(e.message);
+			try
+			{
+				transition(ClientState.CONNECTED);
+			} catch (Error se) {
+				// handled in transition
+			}
+			on_error(e);
 		}		
 	}
 	
 	// native endian!!
 	public size_t write_raw(uint8[] data)
 	{
+		return_if_fail(state >= ClientState.READY);
 		return audio_buffer.write(data);
 	}
 	

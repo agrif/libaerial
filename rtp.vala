@@ -105,7 +105,7 @@ public class RTP : Object
 			debug(build);
 	}
 	
-	public uint8[] send(RTPPacket packet, uint8[] payload) throws IOError
+	public uint8[] send(RTPPacket packet, uint8[] payload) throws Error
 	{
 		var ostream = new MemoryOutputStream(null, realloc, free);
 		var dat = new DataOutputStream(ostream);
