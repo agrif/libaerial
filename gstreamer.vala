@@ -96,9 +96,23 @@ public class Sink : Gst.Audio.Sink
 			
 			if (artistp != cur_artist || titlep != cur_title || albump != cur_album)
 			{
+				// we'll be changing it in a moment, but for now...
+				int64 pos = 0, len = 0;
+				bool has_pos = true;
+				has_pos = has_pos && query_position(Gst.Format.TIME, out pos);
+				has_pos = has_pos && query_duration(Gst.Format.TIME, out len);
+				
 				client.set_metadata(titlep, artistp, albump);
 				if (has_image)
 					client.set_artwork(image_type, imagedata);
+				if (has_pos)
+				{
+					// gstreamer speaks in nanoseconds
+					float fpos = (float)pos / (1000.0f * 1000.0f * 1000.0f);
+					float flen = (float)len / (1000.0f * 1000.0f * 1000.0f);
+					client.set_progress(flen, fpos);
+				}
+				
 				cur_artist = artistp;
 				cur_title = titlep;
 				cur_album = albump;
