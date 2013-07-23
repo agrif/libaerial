@@ -887,9 +887,21 @@ public class Client : GLib.Object
 	public size_t write(uint8[] data, out uint32 scheduled = null)
 	{
 		return_if_fail(state >= ClientState.READY);
+		return_if_fail(data.length % BYTES_PER_FRAME == 0);
+		
 		scheduled = timestamp;
 		scheduled += (uint32)(audio_buffer.get_read_space() / BYTES_PER_FRAME);
-		return audio_buffer.write(data);
+		
+		var to_write = (int)audio_buffer.get_write_space() / BYTES_PER_FRAME;
+		to_write *= BYTES_PER_FRAME;
+		to_write = int.min(data.length, to_write);
+		
+		uint8[] adjusted_data = data;
+		adjusted_data.length = to_write;
+		
+		var written = audio_buffer.write(adjusted_data);
+		assert(written % BYTES_PER_FRAME == 0);
+		return written;
 	}
 	
 	public uint get_queued_samples()
