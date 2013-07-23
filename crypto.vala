@@ -1,4 +1,4 @@
-namespace Airtunes
+namespace Aerial
 {
 	public uint8[] aes_encrypt(uint8[] key, uint8[] iv, uint8[] data)
 	{

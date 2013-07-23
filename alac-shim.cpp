@@ -8,7 +8,7 @@
 
 extern "C"
 {
-	int airtunes_alac_encode(uint8_t* input, int input_length, uint8_t** output, int* output_length)
+	int aerial_alac_encode(uint8_t* input, int input_length, uint8_t** output, int* output_length)
 	{
 		AudioFormatDescription inputFormat, outputFormat;
 		

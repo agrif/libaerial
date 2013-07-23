@@ -25,7 +25,7 @@ public int main(string[] args)
 		host = "localhost";
 	
 	stdout.printf("connecting to %s\n", host);
-	var client = new Airtunes.Client();
+	var client = new Aerial.Client();
 	try
 	{
 		var loop = new GLib.MainLoop();

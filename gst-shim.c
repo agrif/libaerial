@@ -1,18 +1,18 @@
 #include <gst/gst.h>
 
-GType airtunes_sink_get_type (void) G_GNUC_CONST;
-gboolean plugin_init(GstPlugin*);
+GType aerial_sink_get_type (void) G_GNUC_CONST;
+gboolean aerial_plugin_init(GstPlugin*);
 
-#define PACKAGE "airtunes"
+#define PACKAGE "aerial"
 
 GST_PLUGIN_DEFINE (
 	GST_VERSION_MAJOR,
 	GST_VERSION_MINOR,
-	airtunes,
-	"Airtunes Sink",
-	plugin_init,
+	aerial,
+	"Aerial Airtunes Sink",
+	aerial_plugin_init,
 	"0.0.0", // TODO version
 	"LGPL",
-	"airtunes",
-	"http://github.com/agrif/airtunes"
+	"libaerial",
+	"http://github.com/agrif/libaerial"
 )

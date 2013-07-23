@@ -1,4 +1,4 @@
-namespace Airtunes
+namespace Aerial
 {
 
 public extern bool alac_encode(uint8[] input, out uint8[] output);
@@ -46,7 +46,7 @@ public class Client : GLib.Object
 	private const int PACKET_BACKLOG = 1024;	
 	private const int64 NTP_EPOCH = 0x83aa7e80;
 	
-	private const string LOGDOMAIN = "AirtunesClient";
+	private const string LOGDOMAIN = "AerialClient";
 
 	// used to get a monotonic time
 	// units are in microseconds! 1000000μs == 1s

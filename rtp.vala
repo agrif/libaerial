@@ -1,4 +1,4 @@
-namespace Airtunes
+namespace Aerial
 {
 
 public struct RTPPacket
@@ -16,7 +16,7 @@ public struct RTPPacket
 
 public class RTP : Object
 {	
-	private const string LOGDOMAIN = "AirtunesRTP";
+	private const string LOGDOMAIN = "AerialRTP";
 	
 	public string local_host { get; construct; }
 	public uint local_port { get; construct; }

@@ -1,4 +1,4 @@
-namespace Airtunes
+namespace Aerial
 {
 
 public struct RTSPResponse
@@ -18,9 +18,9 @@ public class RTSP : Object
 	private const uint16 DEFAULT_PORT = 5000;
 	private const string PROTOCOL = "RTSP/1.0";
 	// TODO track version properly
-	private const string USER_AGENT = "libairtunes/0.0.0";
+	private const string USER_AGENT = "libaerial/0.0.0";
 	private const string WHITESPACE = " ";
-	private const string LOGDOMAIN = "AirtunesRTSP";
+	private const string LOGDOMAIN = "AerialRTSP";
 
 	// address of the server
 	public string? remote_address { get; private set; default = null; }

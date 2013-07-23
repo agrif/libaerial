@@ -1,4 +1,4 @@
-namespace Airtunes
+namespace Aerial
 {
 
 struct DMAP

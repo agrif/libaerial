@@ -1,4 +1,4 @@
-namespace Airtunes
+namespace Aerial
 {
 	// Vala version of JACK's ISO/POSIX C version of Paul Davis's lock
 	// free ringbuffer C++ code, which assumes one read thread and one

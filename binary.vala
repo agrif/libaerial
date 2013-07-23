@@ -1,4 +1,4 @@
-namespace Airtunes
+namespace Aerial
 {
 	public uint8[] random_bytes(size_t count)
 	{

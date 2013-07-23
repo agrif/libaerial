@@ -3,7 +3,7 @@ TARGET=test
 LDFLAGS=`pkg-config --libs gio-2.0 nettle` -L./alac/ -lalac
 
 GSTSOURCES=gstreamer.vala
-GSTTARGET=airtunes.so
+GSTTARGET=aerial.so
 GSTLDFLAGS=`pkg-config --libs gstreamer-1.0 gstreamer-audio-1.0`
 
 CFLAGS=-w -fPIC -O3 `pkg-config --cflags gio-2.0 nettle gstreamer-1.0`
@@ -38,11 +38,11 @@ clean :
 	rm -f ${GSTSOURCES:.vala=.c}
 	rm -f gst-shim.o
 	rm -f alac-shim.o
-	rm -f libairtunes.h libairtunes.vapi
+	rm -f libaerial.h libaerial.vapi
 	make -C alac clean
 
 valac.stamp : ${SOURCES} ${GSTSOURCES} nettle.vapi
-	$(call quiet,VALAC) -C ${VALAC_FLAGS} ${SOURCES} ${GSTSOURCES} -H libairtunes.h --vapi=libairtunes.vapi
+	$(call quiet,VALAC) -C ${VALAC_FLAGS} ${SOURCES} ${GSTSOURCES} -H libaerial.h --vapi=libaerial.vapi
 	@touch $@
 
 alac/libalac.a :

@@ -1,8 +1,11 @@
-public class AirtunesSink : Gst.Audio.Sink
+namespace Aerial
+{
+
+public class Sink : Gst.Audio.Sink
 {
 	static construct
 	{
-		set_metadata("Airtunes Sink", "FIXME:General", "an audio sink for airtunes devices", "Aaron Griffith <aargri@gmail.com>");
+		set_metadata("Aerial Airtunes Sink", "FIXME:General", "an audio sink for airtunes devices", "Aaron Griffith <aargri@gmail.com>");
 		
 		var caps = new Gst.Caps.empty_simple("audio/x-raw");
 		caps.set_value("rate", 44100);
@@ -18,7 +21,7 @@ public class AirtunesSink : Gst.Audio.Sink
 	private int MAX_ART_SIZE = 200;
 	
 	public string host { get; set; default = "localhost"; }
-	private Airtunes.Client? client = null;
+	private Aerial.Client? client = null;
 	
 	private string? cur_artist = null;
 	private string? cur_album = null;
@@ -54,7 +57,7 @@ public class AirtunesSink : Gst.Audio.Sink
 			
 			Gst.Sample image;
 			bool has_image;
-			Airtunes.ImageType image_type = 0;
+			Aerial.ImageType image_type = 0;
 			uint8[] imagedata = {};
 			has_image = tags.get_sample(Gst.Tags.IMAGE, out image);
 			if (has_image)
@@ -72,10 +75,10 @@ public class AirtunesSink : Gst.Audio.Sink
 				switch (s.get_name())
 				{
 				case "image/jpeg":
-					image_type = Airtunes.ImageType.JPEG;
+					image_type = Aerial.ImageType.JPEG;
 					break;
 				case "image/png":
-					image_type = Airtunes.ImageType.PNG;
+					image_type = Aerial.ImageType.PNG;
 					break;
 				default:
 					has_image = false;
@@ -107,7 +110,7 @@ public class AirtunesSink : Gst.Audio.Sink
 	
 	public override bool open()
 	{
-		client = new Airtunes.Client();
+		client = new Aerial.Client();
 		client.on_error.connect((c, e) =>
 			{
 				stderr.printf("got error %s\n", e.message);
@@ -181,5 +184,7 @@ public class AirtunesSink : Gst.Audio.Sink
 
 public static bool plugin_init(Gst.Plugin plugin)
 {
-	return Gst.Element.register(plugin, "airtunes", Gst.Rank.NONE, typeof(AirtunesSink));
+	return Gst.Element.register(plugin, "aerialsink", Gst.Rank.NONE, typeof(Sink));
+}
+
 }

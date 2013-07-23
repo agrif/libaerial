@@ -1,9 +1,9 @@
 *.o
 /valac.stamp
-/airtunes.so
+/aerial.so
 /alac/libalac.a
-/libairtunes.h
-/libairtunes.vapi
+/libaerial.h
+/libaerial.vapi
 /test
 
 /binary.c
