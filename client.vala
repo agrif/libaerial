@@ -340,13 +340,14 @@ public class Client : GLib.Object
 			if (resp.code != 200)
 				throw new ClientError.HANDSHAKE_FAILED(resp.message);
 			
-			audio_buffer.init((local_buffer_length * FRAMES_PER_SECOND / 1000) * BYTES_PER_FRAME);
-		
 			state = ClientState.READY;
 			return true;
 		
 		case ClientState.READY:
 			// prepare RTP connection for audio
+			
+			audio_buffer.init((local_buffer_length * FRAMES_PER_SECOND / 1000) * BYTES_PER_FRAME);
+			
 			if (auto_sync)
 			{
 				var startsync = timestamp - (uint32)(delay * FRAMES_PER_SECOND / 1000);
@@ -370,7 +371,6 @@ public class Client : GLib.Object
 				sync_source.attach(MainContext.default());
 			}
 
-			send_audio_packet();
 			audio_source  = new TimeoutSource(TIME_PER_PACKET);
 			audio_source.set_callback(() => { send_audio_packet(); return true; });
 			audio_source.attach(MainContext.default());
@@ -926,7 +926,7 @@ public class Client : GLib.Object
 	// native endian!! 16-bit! signed!!!
 	public size_t write(uint8[] data, out uint32 scheduled = null)
 	{
-		return_if_fail(state >= ClientState.READY);
+		return_if_fail(state >= ClientState.PLAYING);
 		return_if_fail(data.length % BYTES_PER_FRAME == 0);
 		
 		scheduled = timestamp;

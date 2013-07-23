@@ -3,6 +3,19 @@ namespace Aerial
 
 public class Sink : Gst.Audio.Sink
 {
+	private string LOGDOMAIN = "AerialSink";
+	
+	// we *should* resize these, but, that's a little bit out of the scope
+	// of this sink!
+	private int MAX_ART_SIZE = 200;
+	
+	public string host { get; set; default = "localhost"; }
+	private Aerial.Client? client = null;
+	
+	private string? cur_artist = null;
+	private string? cur_album = null;
+	private string? cur_title = null;
+
 	static construct
 	{
 		set_metadata("Aerial Airtunes Sink", "FIXME:General", "an audio sink for airtunes devices", "Aaron Griffith <aargri@gmail.com>");
@@ -18,22 +31,10 @@ public class Sink : Gst.Audio.Sink
 		add_pad_template(sink);
 	}
 	
-	private int MAX_ART_SIZE = 200;
-	
-	public string host { get; set; default = "localhost"; }
-	private Aerial.Client? client = null;
-	
-	private string? cur_artist = null;
-	private string? cur_album = null;
-	private string? cur_title = null;
-	
 	public override bool event(Gst.Event ev)
 	{
 		switch (ev.type)
 		{
-		case Gst.EventType.EOS:
-			//client.disconnect_from_host();
-			break;
 		case Gst.EventType.TAG:
 			Gst.TagList tags;
 			ev.parse_tag(out tags);
@@ -113,27 +114,17 @@ public class Sink : Gst.Audio.Sink
 		client = new Aerial.Client();
 		client.on_error.connect((c, e) =>
 			{
-				stderr.printf("got error %s\n", e.message);
+				log(LOGDOMAIN, LogLevelFlags.LEVEL_ERROR, "aerial client error: %s", e.message);
 			});
 		client.notify["state"].connect((c, prop) =>
 			{
-				stdout.printf("client changed to state %s\n", client.state.to_string());
+				log(LOGDOMAIN, LogLevelFlags.LEVEL_DEBUG, "client changed to state %s", client.state.to_string());
 			});
 		
 		try
 		{
-			stdout.printf("connecting to %s\n", host);
-			client.connect_to_host(host);			
-			return true;
-		} catch (Error e) {
-			return false;
-		}
-	}
-	
-	public override bool prepare(Gst.Audio.RingBufferSpec spec)
-	{
-		try
-		{
+			log(LOGDOMAIN, LogLevelFlags.LEVEL_DEBUG, "connecting to %s", host);
+			client.connect_to_host(host);
 			client.play();
 			client.set_volume(1.0f);
 			return true;
@@ -142,14 +133,13 @@ public class Sink : Gst.Audio.Sink
 		}
 	}
 	
+	public override bool prepare(Gst.Audio.RingBufferSpec spec)
+	{
+		return true;
+	}
+	
 	public override bool unprepare()
 	{
-		try
-		{
-			client.stop();
-		} catch (Error e) {
-			return false;
-		}
 		return true;
 	}
 	
@@ -167,6 +157,15 @@ public class Sink : Gst.Audio.Sink
 	
 	public override int write(uint8[] data)
 	{
+		if (client.state != ClientState.PLAYING)
+		{
+			try
+			{
+				client.play();
+			} catch (Error e) {
+				return 0;
+			}
+		}
 		return (int)client.write(data);
 	}
 	
@@ -178,7 +177,11 @@ public class Sink : Gst.Audio.Sink
 	
 	public override void reset()
 	{
-		stdout.printf("reset!\n");
+		try
+		{
+			client.stop();
+		} catch (Error e) {
+		}
 	}
 }
 
