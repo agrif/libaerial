@@ -37,10 +37,11 @@ private struct AudioPacket
 
 public class Client : GLib.Object
 {
+	public const int BYTES_PER_FRAME = 4;
+	public const int FRAMES_PER_SECOND = 44100;
+
 	private const int FRAMES_PER_PACKET = 352;
-	private const int BYTES_PER_FRAME = 4;
 	private const int BYTES_PER_PACKET = BYTES_PER_FRAME * FRAMES_PER_PACKET;
-	private const int FRAMES_PER_SECOND = 44100;
 	private const int SYNC_INTERVAL = 1000;
 	private const int TIME_PER_PACKET = (FRAMES_PER_PACKET * 1000 / FRAMES_PER_SECOND) - 1;
 	private const int PACKET_BACKLOG = 1024;	
@@ -121,11 +122,6 @@ public class Client : GLib.Object
 			audio_packets[i] = AudioPacket();
 		
 		audio_buffer = RingBuffer();
-	}
-	
-	~Client()
-	{
-		disconnect_from_host();
 	}
 	
 	private bool transition(ClientState target) throws Error
