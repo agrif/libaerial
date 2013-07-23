@@ -16,6 +16,19 @@ public enum ImageType
 	JPEG,
 }
 
+private enum ParameterType
+{
+	VOLUME = 1 << 0,
+	METADATA = 1 << 1,
+	ARTWORK = 1 << 2,
+	PROGRESS = 1 << 3;
+	
+	public bool supports(ParameterType type)
+	{
+		return (this & type) != 0;
+	}
+}
+
 public enum ClientState
 {
 	// when first created, and after disconnection/error
@@ -77,6 +90,9 @@ public class Client : GLib.Object
 	private string rsa_aes_key;
 	// whether the remote requires encryption
 	private bool require_encryption = false;
+	
+	// what sort of parameters our endpoint supports
+	private ParameterType parameter_types = 0;
 	
 	// our timers!
 	private TimeoutSource? sync_source = null;
@@ -209,9 +225,15 @@ public class Client : GLib.Object
 				throw new ClientError.HANDSHAKE_FAILED(resp.message);
 			
 			if ("Apple-Response" in resp.headers)
+			{
+				// best guess: airport express
 				require_encryption = true;
-			else
+				parameter_types = ParameterType.VOLUME;
+			} else {
+				// something later, hopefully supports everything
 				require_encryption = false;
+				parameter_types = ParameterType.VOLUME | ParameterType.METADATA | ParameterType.ARTWORK | ParameterType.PROGRESS;
+			}
 			
 			if (require_encryption)
 				log(LOGDOMAIN, LogLevelFlags.LEVEL_DEBUG, "using encryption");
@@ -543,6 +565,8 @@ public class Client : GLib.Object
 	// between 0 and 1
 	public bool set_volume(float volume, uint32? tstamp = null) throws Error
 	{
+		if (!parameter_types.supports(ParameterType.VOLUME))
+			return true;
 		var dbvol = get_dbvol(volume);
 		var body = "volume: %f\r\n".printf(dbvol);
 		return set_parameter(tstamp, "text/parameters", body.data);
@@ -550,6 +574,8 @@ public class Client : GLib.Object
 
 	public async bool set_volume_async(float volume, uint32? tstamp=null) throws Error
 	{
+		if (!parameter_types.supports(ParameterType.VOLUME))
+			return true;
 		var dbvol = get_dbvol(volume);
 		var body = "volume: %f\r\n".printf(dbvol);
 		return yield set_parameter_async(tstamp, "text/parameters", body.data);
@@ -582,12 +608,16 @@ public class Client : GLib.Object
 	
 	public bool set_metadata(string? title=null, string? artist=null, string? album=null, uint32? tstamp=null) throws Error
 	{
+		if (!parameter_types.supports(ParameterType.METADATA))
+			return true;
 		var body = dmap_metadata(title, artist, album);
 		return set_parameter(tstamp, "application/x-dmap-tagged", body);
 	}
 	
 	public async bool set_metadata_async(string? title=null, string? artist=null, string? album=null, uint32? tstamp=null) throws Error
 	{
+		if (!parameter_types.supports(ParameterType.METADATA))
+			return true;
 		var body = dmap_metadata(title, artist, album);
 		return yield set_parameter_async(tstamp, "application/x-dmap-tagged", body);
 	}
@@ -611,17 +641,24 @@ public class Client : GLib.Object
 	
 	public bool set_artwork(ImageType type, uint8[] data, uint32? tstamp=null) throws Error
 	{
+		if (!parameter_types.supports(ParameterType.ARTWORK))
+			return true;
 		return set_parameter(tstamp, get_mime(type), data);
 	}
 	
 	public async bool set_artwork_async(ImageType type, uint8[] data, uint32? tstamp=null) throws Error
 	{
+		if (!parameter_types.supports(ParameterType.ARTWORK))
+			return true;
 		return yield set_parameter_async(tstamp, get_mime(type), data);
 	}
 	
 	// times are in seconds!
 	public bool set_progress(float length, float current, uint32? tstamp=null) throws Error
 	{
+		if (!parameter_types.supports(ParameterType.PROGRESS))
+			return true;
+		
 		if (tstamp == null)
 			tstamp = timestamp + (uint32)(audio_buffer.get_read_space() / BYTES_PER_FRAME);
 		
@@ -633,6 +670,9 @@ public class Client : GLib.Object
 	
 	public async bool set_progress_async(float length, float current, uint32? tstamp=null) throws Error
 	{
+		if (!parameter_types.supports(ParameterType.PROGRESS))
+			return true;
+		
 		if (tstamp == null)
 			tstamp = timestamp + (uint32)(audio_buffer.get_read_space() / BYTES_PER_FRAME);
 		
