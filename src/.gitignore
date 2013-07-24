@@ -13,3 +13,5 @@
 /libaerial.la
 /gstreamer.c
 /libgstaerial.la
+/Aerial-1.0.gir
+/Aerial-1.0.typelib

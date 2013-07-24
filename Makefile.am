@@ -1,8 +1,11 @@
 ACLOCAL_AMFLAGS = -I m4 $(ACLOCAL_FLAGS)
+# introspection breaks, and we want to be able to build without vala
+AM_DISTCHECK_CONFIGURE_FLAGS = --disable-vala --disable-introspection
 SUBDIRS = src
 
-EXTRA_DIST = autogen.sh
+EXTRA_DIST = autogen.sh aerial.pc.in
 dist_doc_DATA = README.md
+pkgconfig_DATA = aerial.pc
 
 # copied from libpeas -- git => ChangeLog!
 dist-hook:

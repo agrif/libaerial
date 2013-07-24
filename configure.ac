@@ -50,8 +50,14 @@ dnl =====================
 LT_INIT
 AC_PROG_CC
 AC_PROG_CXX
-AM_PROG_VALAC
 AC_PROG_INSTALL
+
+VALA_ADD_CHECKFILE([src/aerial_test_vala.stamp])
+VALA_ADD_CHECKFILE([src/libgstaerial_la_vala.stamp])
+VALA_ADD_CHECKFILE([src/libaerial_la_vala.stamp])
+VALA_CHECK([])
+
+GOBJECT_INTROSPECTION_CHECK([0.9.0])
 
 dnl =================
 dnl pkg-config Checks
@@ -84,6 +90,20 @@ AC_DEFINE(G_LOG_DOMAIN, "libaerial", [Log domain])
 GNOME_COMPILE_WARNINGS([maximum])
 GNOME_MAINTAINER_MODE_DEFINES
 
+dnl vala vapi directory
+vapidir="\$(datadir)/vala/vapi"
+AC_SUBST(vapidir)
+
+dnl gir/typelib directory
+girdir="\$(INTROSPECTION_GIRDIR)"
+typelibdir="\$(INTROSPECTION_TYPELIBDIR)"
+AC_SUBST(girdir)
+AC_SUBST(typelibdir)
+
+dnl pkgconfig directory
+pkgconfigdir="\$(libdir)/pkgconfig"
+AC_SUBST(pkgconfigdir)
+
 dnl set up gstreamer plugin directory
 gstplugindir="\$(libdir)/gstreamer-1.0"
 AC_SUBST(gstplugindir)
@@ -93,6 +113,7 @@ dnl Substitution List
 dnl =================
 
 AC_CONFIG_FILES([
+	aerial.pc
 	Makefile
 	src/Makefile
 	src/alac/Makefile
@@ -111,6 +132,10 @@ Configuration:
 	Source code location : $srcdir
 	C Compiler           : $CC
 	C++ Compiler         : $CXX
-	Vala Compiler        : $VALAC
-	Installation prefix  : $prefix
+	Enable Introspection : $enable_introspection
+	Use Vala Compiler    : $enable_vala"
+AS_IF([test x$enable_vala == xyes],
+	[echo "	Vala Compiler        : $VALAC"])
+
+echo "	Installation prefix  : $prefix
 "
