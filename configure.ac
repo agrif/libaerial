@@ -73,14 +73,28 @@ PKG_CHECK_MODULES(GIO, [
 	gio-2.0 >= $GIO_REQUIRED
 ])
 
-PKG_CHECK_MODULES(NETTLE, [
+PKG_CHECK_MODULES(Nettle, [
 	nettle >= $NETTLE_REQUIRED
 ])
 
-PKG_CHECK_MODULES(GSTREAMER, [
-	gstreamer-1.0 >= $GST_REQUIRED
-	gstreamer-audio-1.0 >= $GST_REQUIRED
-])
+AC_ARG_ENABLE(gstreamer,
+	AS_HELP_STRING([--enable-gstreamer], [Enable GStreamer plugin]),
+	[enable_gstreamer=$enableval],
+	[enable_gstreamer=auto])
+
+AS_IF([test "x$enable_gstreamer" = "xno"],
+	[found_gstreamer="no"],
+	[PKG_CHECK_MODULES(GStreamer, [
+		gstreamer-1.0 >= $GST_REQUIRED
+		gstreamer-audio-1.0 >= $GST_REQUIRED
+	],
+	[found_gstreamer="yes"],
+	[found_gstreamer="no (missing requirements)"; AC_MSG_WARN($GStreamer_PKG_ERRORS)])])
+
+AS_IF([(test "x$enable_gstreamer" = "xyes" -a "x$found_gstreamer" != "xyes")],
+	[AC_MSG_ERROR([missing requirements for GStreamer plugin])])
+
+AM_CONDITIONAL([ENABLE_GSTREAMER], [test "x$found_gstreamer" = "xyes"])
 
 dnl ===========
 dnl Other Stuff
@@ -90,23 +104,29 @@ AC_DEFINE(G_LOG_DOMAIN, "libaerial", [Log domain])
 GNOME_COMPILE_WARNINGS([maximum])
 GNOME_MAINTAINER_MODE_DEFINES
 
+dnl pkgconfig directory
+pkgconfigdir="\$(libdir)/pkgconfig"
+AC_SUBST(pkgconfigdir)
+
 dnl vala vapi directory
 vapidir="\$(datadir)/vala/vapi"
 AC_SUBST(vapidir)
 
 dnl gir/typelib directory
-girdir="\$(INTROSPECTION_GIRDIR)"
-typelibdir="\$(INTROSPECTION_TYPELIBDIR)"
-AC_SUBST(girdir)
-AC_SUBST(typelibdir)
-
-dnl pkgconfig directory
-pkgconfigdir="\$(libdir)/pkgconfig"
-AC_SUBST(pkgconfigdir)
+AM_COND_IF([HAVE_INTROSPECTION],
+	[
+	girdir="\$(INTROSPECTION_GIRDIR)"
+	typelibdir="\$(INTROSPECTION_TYPELIBDIR)"
+	AC_SUBST(girdir)
+	AC_SUBST(typelibdir)
+	])
 
 dnl set up gstreamer plugin directory
-gstplugindir="\$(libdir)/gstreamer-1.0"
-AC_SUBST(gstplugindir)
+AM_COND_IF([ENABLE_GSTREAMER],
+	[
+	gstplugindir="\$(libdir)/gstreamer-1.0"
+	AC_SUBST(gstplugindir)
+	])
 
 dnl =================
 dnl Substitution List
@@ -131,11 +151,13 @@ Configuration:
 
 	Source code location : $srcdir
 	C Compiler           : $CC
-	C++ Compiler         : $CXX
-	Enable Introspection : $enable_introspection
-	Use Vala Compiler    : $enable_vala"
-AS_IF([test x$enable_vala == xyes],
-	[echo "	Vala Compiler        : $VALAC"])
+	C++ Compiler         : $CXX"
+AS_IF([test "x$enable_vala" = "xyes"],
+	[echo "	Vala Compiler        : $VALAC"],
+	[echo "	Vala Compiler        : disabled"])
 
 echo "	Installation prefix  : $prefix
+
+	Enable Introspection : $enable_introspection
+	GStreamer Plugin     : $found_gstreamer
 "

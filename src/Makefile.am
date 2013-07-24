@@ -1,13 +1,13 @@
 SUBDIRS = alac
 
-AM_CPPFLAGS = $(GIO_CFLAGS) $(NETTLE_CFLAGS)
+AM_CPPFLAGS = $(GIO_CFLAGS) $(Nettle_CFLAGS)
 
 lib_LTLIBRARIES = libaerial.la
 vapi_DATA = aerial.vapi
 pkginclude_HEADERS = aerial.h
-gstplugin_LTLIBRARIES = libgstaerial.la
 bin_PROGRAMS = aerial-test
 
+# introspection only!
 if HAVE_INTROSPECTION
 gir_DATA = Aerial-1.0.gir
 typelib_DATA = Aerial-1.0.typelib
@@ -23,7 +23,7 @@ endif
 # this (and you should!) go bug the Vala people.
 libaerial_la_CFLAGS = -w
 libaerial_la_CXXFLAGS = $(libaerial_la_CFLAGS)
-libaerial_la_LIBADD = $(GIO_LIBS) $(NETTLE_LIBS) alac/libalac.la
+libaerial_la_LIBADD = $(GIO_LIBS) $(Nettle_LIBS) alac/libalac.la
 libaerial_la_VALAFLAGS = --pkg gio-2.0 --pkg posix --library aerial
 libaerial_la_VALAFLAGS += -H aerial.h --gir Aerial-1.0.gir
 libaerial_la_LDFLAGS = -version_info $(AERIAL_LT_VERSION)
@@ -42,11 +42,16 @@ nodist_EXTRA_aerial_test_SOURCES = dummy1.cxx # force c++ linker
 aerial_test_VALAFLAGS = --pkg gio-2.0
 aerial_test_SOURCES = main.vala aerial.vapi
 
-libgstaerial_la_CFLAGS = -w $(GSTREAMER_CFLAGS)
-libgstaerial_la_LIBADD = $(GSTREAMER_LIBS) libaerial.la
+# gstreamer only!
+if ENABLE_GSTREAMER
+gstplugin_LTLIBRARIES = libgstaerial.la
+
+libgstaerial_la_CFLAGS = -w $(GStreamer_CFLAGS)
+libgstaerial_la_LIBADD = $(GStreamer_LIBS) libaerial.la
 nodist_EXTRA_libgstaerial_la_SOURCES = dummy2.cxx # force c++ linker
 libgstaerial_la_VALAFLAGS = --pkg gio-2.0 --pkg gstreamer-1.0
 libgstaerial_la_VALAFLAGS += --pkg gstreamer-audio-1.0
 libgstaerial_la_LDFLAGS = -module -shared -avoid-version
 libgstaerial_la_LDFLAGS += -export-symbols-regex [_]*\(gst_\|Gst\|GST_\).*
 libgstaerial_la_SOURCES = gstreamer.vala gst-shim.c aerial.vapi
+endif
