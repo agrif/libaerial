@@ -11,3 +11,5 @@
 /aerial.h
 /aerial.vapi
 /libaerial.la
+/gstreamer.c
+/libgstaerial.la

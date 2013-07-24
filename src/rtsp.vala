@@ -1,3 +1,6 @@
+extern const string PACKAGE_VERSION;
+extern const string PACKAGE_TARNAME;
+
 namespace Aerial
 {
 
@@ -17,8 +20,7 @@ public class RTSP : Object
 {
 	private const uint16 DEFAULT_PORT = 5000;
 	private const string PROTOCOL = "RTSP/1.0";
-	// TODO track version properly
-	private const string USER_AGENT = "libaerial/0.0.0";
+	private const string USER_AGENT = PACKAGE_TARNAME + "/" + PACKAGE_VERSION;
 	private const string WHITESPACE = " ";
 	private const string LOGDOMAIN = "AerialRTSP";
 

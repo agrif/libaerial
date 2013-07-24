@@ -1,3 +1,5 @@
+extern const string PACKAGE_BUGREPORT;
+
 namespace Aerial
 {
 
@@ -18,7 +20,7 @@ public class Sink : Gst.Audio.Sink
 
 	static construct
 	{
-		set_metadata("Aerial Airtunes Sink", "FIXME:General", "an audio sink for airtunes devices", "Aaron Griffith <aargri@gmail.com>");
+		set_metadata("Aerial Airtunes Sink", "FIXME:General", "an audio sink for airtunes devices", PACKAGE_BUGREPORT);
 		
 		var caps = new Gst.Caps.empty_simple("audio/x-raw");
 		caps.set_value("rate", 44100);
