@@ -38,11 +38,13 @@ aerial.vapi aerial.h Aerial.gir : libaerial_la_vala.stamp
 
 aerial_test_CFLAGS = -w
 aerial_test_LDADD = libaerial.la
+nodist_EXTRA_aerial_test_SOURCES = dummy1.cxx # force c++ linker
 aerial_test_VALAFLAGS = --pkg gio-2.0
 aerial_test_SOURCES = main.vala aerial.vapi
 
 libgstaerial_la_CFLAGS = -w $(GSTREAMER_CFLAGS)
 libgstaerial_la_LIBADD = $(GSTREAMER_LIBS) libaerial.la
+nodist_EXTRA_libgstaerial_la_SOURCES = dummy2.cxx # force c++ linker
 libgstaerial_la_VALAFLAGS = --pkg gio-2.0 --pkg gstreamer-1.0
 libgstaerial_la_VALAFLAGS += --pkg gstreamer-audio-1.0
 libgstaerial_la_LDFLAGS = -module -shared -avoid-version
