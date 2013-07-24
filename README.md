@@ -20,8 +20,11 @@ such as Python and Javascript.
 Dependencies
 ------------
 
-Though libaerial is written in Vala, you do not need a Vala compiler
-to use it. Instead, you need a couple libraries:
+libaerial is written in Vala, so if you are checking out the source
+from git, you will need the Vala compiler. If you received libaerial
+as a tarball, chances are it includes the Vala-generated C files
+already, in which case you do not need a Vala compiler. You will also
+need a couple of libraries:
 
  * [GLib][] -- including GObject and GIO, for networking
  * [Nettle][] -- for cryptographic support
