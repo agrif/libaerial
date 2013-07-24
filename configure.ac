@@ -135,6 +135,7 @@ dnl =================
 AC_CONFIG_FILES([
 	aerial.pc
 	Makefile
+	examples/Makefile
 	src/Makefile
 	src/alac/Makefile
 ])

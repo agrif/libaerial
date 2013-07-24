@@ -13,8 +13,8 @@ gir_DATA = Aerial-1.0.gir
 typelib_DATA = Aerial-1.0.typelib
 libaerial_dlname = \
 	`$(SED) -nE "s/^dlname='([A-Za-z0-9.+-]+)'/\1/p" libaerial.la`
-Aerial-1.0.typelib : Aerial-1.0.gir
-	@INTROSPECTION_COMPILER@ -l $(libaerial_dlname) -o $@ $^
+Aerial-1.0.typelib : Aerial-1.0.gir libaerial.la
+	@INTROSPECTION_COMPILER@ -l $(libaerial_dlname) -o $@ $<
 MOSTLYCLEANFILES = Aerial-1.0.typelib
 endif
 
