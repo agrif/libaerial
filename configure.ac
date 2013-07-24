@@ -4,14 +4,36 @@ dnl =============================
 
 AC_PREREQ([2.65])
 
+dnl human-friendly version number, major.minor.patch scheme
 m4_define(aerial_major_version, 0)
 m4_define(aerial_minor_version, 0)
 m4_define(aerial_patch_version, 0)
 
+dnl libtool library version, current:revision:age scheme
+m4_define(aerial_lt_current_version, 0)
+m4_define(aerial_lt_revision_version, 0)
+m4_define(aerial_lt_age_version, 0)
+
+dnl Handy-Dandy Version Management Guide
+dnl ------------------------------------
+dnl
+dnl Bump patch for any release that doesn't change the interface, bump
+dnl minor for any change that does, and bump major for a major
+dnl restructuring. Major-0 is special: it's basically beta-phase, and
+dnl the last Major-0 release will likely be similar to the first Major-1
+dnl release.
+dnl
+dnl Bump revision for any release, then if the external interface has
+dnl changed, bump current and set revision to 0. If all new interfaces
+dnl are backwards-compatible, bump age, and if not, set age to 0.
+
 m4_define(aerial_version, [aerial_major_version.aerial_minor_version.aerial_patch_version])
+m4_define(aerial_lt_version, [aerial_lt_current_version:aerial_lt_revision_version:aerial_lt_age_version])
 
 AC_INIT([libaerial], [aerial_version], [aargri@gmail.com], [libaerial],
 	[http://github.com/agrif/libaerial])
+
+AC_SUBST(AERIAL_LT_VERSION, aerial_lt_version)
 
 AC_CONFIG_SRCDIR([src/client.vala])
 AC_CONFIG_MACRO_DIR([m4])

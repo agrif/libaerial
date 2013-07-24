@@ -13,6 +13,7 @@ libaerial_la_CFLAGS = -w
 libaerial_la_CXXFLAGS = $(libaerial_la_CFLAGS)
 libaerial_la_LIBADD = $(GIO_LIBS) $(NETTLE_LIBS) alac/libalac.la
 libaerial_la_VALAFLAGS = --pkg gio-2.0 --pkg posix --library aerial -H aerial.h
+libaerial_la_LDFLAGS = -version_info $(AERIAL_LT_VERSION)
 
 libaerial_la_SOURCES = binary.vala client.vala rtp.vala crypto.vala
 libaerial_la_SOURCES += ring-buffer.vala rtsp.vala dmap.vala alac-shim.cpp
