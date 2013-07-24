@@ -1,0 +1,13 @@
+/aerial-test
+/alac/libalac.la
+/binary.c
+/client.c
+/crypto.c
+/dmap.c
+/main.c
+/ring-buffer.c
+/rtp.c
+/rtsp.c
+/aerial.h
+/aerial.vapi
+/libaerial.la
