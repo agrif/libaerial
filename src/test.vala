@@ -1,7 +1,14 @@
+extern const string PACKAGE_NAME;
+extern const string PACKAGE_VERSION;
+extern const string PACKAGE_BUGREPORT;
+extern const string PACKAGE_URL;
+
+private static bool version = false;
 private static string? host = null;
 
 private const GLib.OptionEntry[] options = {
-	{"host", 'h', 0, OptionArg.STRING, ref host, "airtunes server", "HOST"},
+	{"version", 0, 0, OptionArg.NONE, ref version, "print verision and exit", null},
+	{"host", 'h', 0, OptionArg.STRING, ref host, "airtunes server to connect to", "HOST"},
 	
 	{ null }
 };
@@ -11,6 +18,13 @@ public int main(string[] args)
 	try
 	{
 		var opts = new GLib.OptionContext("- an airtunes test client");
+		opts.set_summary(
+			" Connects to the provided server and emits a sine wave at 440Hz for 10 seconds."
+			);
+		opts.set_description(
+			" This program is distributed as part of " + PACKAGE_NAME + ". Please report bugs to\n" +
+			" <" + PACKAGE_URL + ">.\n"
+			);
 		opts.set_help_enabled(true);
 		opts.add_main_entries(options, null);
 		opts.parse(ref args);
@@ -18,6 +32,12 @@ public int main(string[] args)
 		stderr.printf("error: %s\n", e.message);
 		stderr.printf("run %s --help to see some help\n", args[0]);
 		return 1;
+	}
+	
+	if (version)
+	{
+		stdout.printf("%s %s\n", PACKAGE_NAME, PACKAGE_VERSION);
+		return 0;
 	}
 	
 	if (host == null)
@@ -45,6 +65,9 @@ public int main(string[] args)
 		uint32 t = 0;
 		Idle.add(() =>
 			{
+				if (client.state != Aerial.ClientState.PLAYING)
+					return false;
+				
 				var freq = 440.0;
 				uint8[] buf = {};
 				buf.resize(1024 * 4);

@@ -40,7 +40,7 @@ aerial_test_CFLAGS = -w
 aerial_test_LDADD = libaerial.la
 nodist_EXTRA_aerial_test_SOURCES = dummy1.cxx # force c++ linker
 aerial_test_VALAFLAGS = --pkg gio-2.0
-aerial_test_SOURCES = main.vala aerial.vapi
+aerial_test_SOURCES = test.vala aerial.vapi
 
 # gstreamer only!
 if ENABLE_GSTREAMER

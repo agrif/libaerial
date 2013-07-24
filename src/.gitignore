@@ -4,7 +4,7 @@
 /client.c
 /crypto.c
 /dmap.c
-/main.c
+/test.c
 /ring-buffer.c
 /rtp.c
 /rtsp.c
