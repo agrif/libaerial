@@ -31,6 +31,9 @@ public class Sink : Gst.Audio.Sink
 	private int MAX_ART_SIZE = 200;
 	
 	public string host { get; set; default = "localhost"; }
+	public uint remote_buffer_length { get; set; default = 0; }
+	public uint local_buffer_length { get; set; default = 0; }
+	public uint remote_delay { get; set; default = 0; }
 	private Aerial.Client? client = null;
 	
 	private string? cur_artist = null;
@@ -147,6 +150,13 @@ public class Sink : Gst.Audio.Sink
 	public override bool open()
 	{
 		client = new Aerial.Client();
+		if (remote_buffer_length > 0)
+			client.remote_buffer_length = remote_buffer_length;
+		if (local_buffer_length > 0)
+			client.local_buffer_length = local_buffer_length;
+		if (remote_delay > 0)
+			client.delay = remote_delay;
+		
 		client.on_error.connect((c, e) =>
 			{
 				log(LOGDOMAIN, LogLevelFlags.LEVEL_ERROR, "aerial client error: %s", e.message);
