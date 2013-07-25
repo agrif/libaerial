@@ -971,6 +971,12 @@ public class Client : GLib.Object
 		var queued_local = audio_buffer.get_read_space() / BYTES_PER_FRAME;
 		return (uint)(queued_remote + queued_local);
 	}
+	
+	// return value is in bytes!
+	public size_t get_write_space()
+	{
+		return audio_buffer.get_write_space();
+	}
 }
 
 }
