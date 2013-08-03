@@ -6,11 +6,11 @@ AC_PREREQ([2.65])
 
 dnl human-friendly version number, major.minor.patch scheme
 m4_define(aerial_major_version, 0)
-m4_define(aerial_minor_version, 0)
+m4_define(aerial_minor_version, 1)
 m4_define(aerial_patch_version, 0)
 
 dnl libtool library version, current:revision:age scheme
-m4_define(aerial_lt_current_version, 0)
+m4_define(aerial_lt_current_version, 1)
 m4_define(aerial_lt_revision_version, 0)
 m4_define(aerial_lt_age_version, 0)
 
