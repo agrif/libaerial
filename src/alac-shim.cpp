@@ -25,6 +25,11 @@
 // 2 channels => 1. It just does. Sorry.
 #define kTestFormatFlag_16BitSourceData 1
 
+// the encoder is buggy! it occasionally produces more bytes than it thinks is
+// possible, so let's fudge it to prevent corruption
+// (again: Sorry.)
+#define maxOutputSizeFudge 512
+
 extern "C"
 {
 	int aerial_alac_encode(uint8_t* input, int input_length, uint8_t** output, int* output_length)
@@ -58,7 +63,7 @@ extern "C"
 		if (expectedInputSize != input_length)
 			return 0;
 		
-		int32_t maxOutputSize = expectedInputSize + kALACMaxEscapeHeaderBytes;
+		int32_t maxOutputSize = expectedInputSize + kALACMaxEscapeHeaderBytes + maxOutputSizeFudge;
 		uint8_t* outputBuf = (uint8_t*)calloc(maxOutputSize, 1);
 		
 		// now we can start in earnest
